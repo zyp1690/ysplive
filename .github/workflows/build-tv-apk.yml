@@ -1,0 +1,90 @@
+name: build-tv-apk
+
+# 从 .github/tv-assets.json 拉取 tv-app 源码（tar.gz）落到仓库，
+# 再用 tv-app/build.sh 构建 APK，挂到 Release tv-v1.0.0。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/tv-assets.json"
+      - ".github/workflows/build-tv-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 拉取 tv-app 源码
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, pathlib, shutil, tarfile, urllib.request
+          root = pathlib.Path('.')
+          spec = json.loads((root / '.github/tv-assets.json').read_text('utf-8'))
+          tmp = root / '.tv-tmp'
+          shutil.rmtree(tmp, ignore_errors=True)
+          tmp.mkdir()
+          for a in spec['assets']:
+              f = tmp / 'pkg'
+              print('GET', a['url'])
+              req = urllib.request.Request(a['url'], headers={'User-Agent': 'ysplive-ci'})
+              with urllib.request.urlopen(req, timeout=120) as r, open(f, 'wb') as out:
+                  shutil.copyfileobj(r, out)
+              sha = hashlib.sha256(f.read_bytes()).hexdigest()
+              if a.get('sha256') and sha != a['sha256'].lower():
+                  raise SystemExit(f'sha256 mismatch: {sha}')
+              dest = root / a['path']
+              shutil.rmtree(dest, ignore_errors=True)
+              dest.mkdir(parents=True)
+              with tarfile.open(f, 'r:gz') as tf:
+                  for m in tf.getmembers():
+                      parts = pathlib.PurePosixPath(m.name).parts
+                      if not parts:
+                          continue
+                      target = dest.joinpath(*parts)
+                      if m.isdir():
+                          target.mkdir(parents=True, exist_ok=True)
+                      elif m.isfile():
+                          target.parent.mkdir(parents=True, exist_ok=True)
+                          with tf.extractfile(m) as src, open(target, 'wb') as o2:
+                              shutil.copyfileobj(src, o2)
+              print('extracted ->', dest)
+          shutil.rmtree(tmp, ignore_errors=True)
+          PY
+
+      - name: 提交源码
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tv-app
+          if git diff --cached --quiet; then
+            echo "tv-app 无变化"
+          else
+            git commit -m "chore: 同步 tv-app 源码 [skip ci]"
+            git push
+          fi
+
+      - name: 构建 APK
+        run: |
+          set -euo pipefail
+          cd tv-app
+          bash build.sh
+          ls -l *.apk
+          sha256sum *.apk
+
+      - name: 发布到 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd tv-app
+          APK=$(ls ysplive-tv-v*.apk | head -1)
+          NOTES=$'安卓电视/手机客户端（Android 4.0+，API 14 起）\n\n- 连你 NAS 上的 ysplive（默认 8767 端口），原生 MediaPlayer 播 HLS，不依赖 hls.js/MSE\n- 遥控：↑↓ 选台，←→ 上下台，OK 开/收左栏，返回收起，菜单改地址\n- 安装后先填 NAS 地址与端口\n\n源码在仓库 tv-app/ 目录，构建命令：bash build.sh'
+          gh release create "tv-v${GITHUB_RUN_NUMBER}-apk" --title "ysplive TV APK" --notes "$NOTES" "$APK" \
+            || gh release upload "tv-v${GITHUB_RUN_NUMBER}-apk" "$APK" --clobber
