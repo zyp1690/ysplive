@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08111c">
+<title>央视频直播</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="shell" id="shell">
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">ysplive</span>
+      <h1 id="siteTitle">央视频直播</h1>
+      <span class="pill" id="statusPill"><i></i><span id="statusText">连接中</span></span>
+    </div>
+    <div class="tools">
+      <button class="tbtn on" id="btnLine" title="切换播放线路">主线路</button>
+      <button class="tbtn" id="btnFold" title="收起 / 展开侧栏">收起</button>
+      <button class="tbtn" id="btnAdmin" title="频道与站点设置">管理</button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <aside class="panel chlist" id="chlist">
+      <div class="listhead">
+        <div class="lh-row">
+          <h2>频道列表</h2>
+          <span id="chCount" class="muted">—</span>
+        </div>
+        <div class="chips" id="filters"></div>
+      </div>
+      <div class="rows" id="rows"></div>
+    </aside>
+
+    <section class="panel info" id="info">
+      <div class="info-scroll">
+        <div class="info-head">
+          <div class="idx" id="iIdx">1</div>
+          <div class="ih-text">
+            <div class="iname" id="iName">选择一个频道</div>
+            <div class="igroup" id="iGroup">央视 / 卫视</div>
+          </div>
+        </div>
+
+        <div class="watch" id="iWatch"><i></i><span>正在观看</span></div>
+
+        <div class="info-body">
+        <div class="block">
+          <div class="label">正在播出</div>
+          <div class="prog" id="iNow">—</div>
+          <div class="time" id="iNowTime"></div>
+        </div>
+
+        <div class="block">
+          <div class="label">稍后播出</div>
+          <div class="prog dim" id="iNext">—</div>
+          <div class="time" id="iNextTime"></div>
+        </div>
+
+        <div class="block">
+          <div class="label">信号来源</div>
+          <div class="src" id="iSrc">央视频直播 · 主线路</div>
+          <div class="small muted" id="iSrcNote">备用线路：NAS 代理转发</div>
+          <div class="small muted">20 秒无画面自动切换</div>
+        </div>
+        </div>
+      </div>
+      <button class="playbig" id="btnPlay">立即收看</button>
+      <div class="hint">点一行看信息 · 再点一次收看</div>
+    </section>
+
+    <section class="screen" id="screen">
+      <video id="vid" playsinline></video>
+      <div class="idle" id="idle">
+        <div class="idle-mark">ysplive</div>
+        <div class="idle-ch" id="idleCh">央视频直播</div>
+        <div class="idle-prog" id="idleProg">选一个频道，再点一次开始收看</div>
+      </div>
+      <div class="screenbar">
+        <span class="tag" id="lineTag">主线路</span>
+        <span class="tag ghost" id="playState">未播放</span>
+        <button class="mini" id="btnFull">全屏</button>
+      </div>
+
+      <div class="osd" id="osd">
+        <div class="osd-col osd-list">
+          <div class="osd-head"><span>频道列表</span><span class="osd-count" id="osdCount">64 路</span></div>
+          <div class="chips" id="osdChips"></div>
+          <div class="rows" id="osdRows"></div>
+        </div>
+        <div class="osd-col osd-info">
+          <div class="oi-idx" id="oiIdx">1</div>
+          <div class="oi-name" id="oiName">CCTV-1 综合</div>
+          <div class="oi-group" id="oiGroup">央视</div>
+          <div class="oi-watch" id="oiWatch"><i></i><span>正在观看</span></div>
+          <div class="oi-body">
+            <div class="oi-label">正在播出</div>
+            <div class="oi-prog" id="oiNow">—</div>
+            <div class="oi-time" id="oiNowTime"></div>
+            <div class="oi-label">稍后播出</div>
+            <div class="oi-prog dim" id="oiNext">—</div>
+            <div class="oi-time" id="oiNextTime"></div>
+            <div class="oi-label">信号来源</div>
+            <div class="oi-src" id="oiSrc">央视频直播 · 主线路</div>
+            <div class="oi-time">备用线路：NAS 代理转发</div>
+          </div>
+          <button class="oi-btn" id="oiPlay">立即收看</button>
+        </div>
+        <div class="osd-tools">
+          <button class="tbtn" id="osdLine">主线路</button>
+          <button class="tbtn" id="osdAdmin">管理</button>
+          <button class="tbtn" id="osdFull">全屏</button>
+          <button class="tbtn" id="osdFold">收起</button>
+        </div>
+        <div class="osd-hint">点一行换台 · 点空白处继续观看</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site">
+    <div class="foot-title">ysplive · 飞牛 fnOS 原生版</div>
+    <div class="copy">© 2026 火舞狂沙 · 本包为飞牛 fnOS 适配版</div>
+  </footer>
+</div>
+
+<!-- 管理面板 -->
+<div class="sheet" id="admin">
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <h2>频道与站点设置</h2>
+      <div class="tools">
+        <button class="tbtn" id="btnRefresh">刷新</button>
+        <button class="tbtn" id="btnAdminClose">关闭</button>
+      </div>
+    </div>
+    <div class="sheet-body">
+      <div class="card">
+        <h3>站点</h3>
+        <div class="grid2">
+          <label><span>标题</span><input id="fTitle" maxlength="40" placeholder="央视频直播"></label>
+          <label><span>公告</span><input id="fNotice" maxlength="120" placeholder="显示在界面顶部的一句话"></label>
+        </div>
+        <div class="row-inline">
+          <button class="btn accent" id="btnSiteSave">保存站点</button>
+          <span class="muted small" id="fScope">—</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>订阅地址</h3>
+        <div class="row-inline">
+          <input id="subUrl" readonly>
+          <button class="btn ghost" id="btnCopy">复制</button>
+        </div>
+        <p class="muted small">填到电视/播放器；这里的改动会同步进这份订阅单。</p>
+      </div>
+
+      <div class="card">
+        <h3>频道 <span class="muted small" id="adminCount"></span></h3>
+        <div class="row-inline">
+          <input id="search" placeholder="搜索频道 / 分组">
+          <button class="btn accent" id="btnAdd">新增频道</button>
+        </div>
+        <div class="table-wrap">
+          <table class="grid">
+            <thead><tr><th>频道</th><th>分组</th><th>地址</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody id="adminRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>运行信息</h3>
+        <div class="kv" id="kvInfo"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 频道编辑 -->
+<div class="mask" id="mChan">
+  <div class="dialog">
+    <h3 id="mChanTitle">编辑频道</h3>
+    <div class="grid2">
+      <label><span>名称</span><input id="cName" maxlength="40"></label>
+      <label><span>分组</span><input id="cGroup" maxlength="20"></label>
+    </div>
+    <label id="wrapLogo" class="full"><span>台标地址（可选）</span><input id="cLogo" placeholder="https://…"></label>
+    <label class="full"><span>播放地址</span><input id="cUrl" placeholder="https://….m3u8"></label>
+    <p class="muted small" id="cUrlTip"></p>
+    <div class="dialog-foot">
+      <button class="btn ghost" data-close>取消</button>
+      <button class="btn accent" id="btnChanSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/static/hls.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

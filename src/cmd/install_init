@@ -1,0 +1,29 @@
+#!/bin/bash
+# 安装前置检查：确认运行环境可用
+set -u
+
+fail() {
+    printf '%s\n' "$1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+}
+
+# 1. Python 运行环境（优先飞牛运行时包 python312）
+PYBIN=""
+for c in /var/apps/python312/target/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
+    [ -x "$c" ] && { PYBIN="$c"; break; }
+done
+if [ -z "$PYBIN" ]; then
+    PYBIN="$(command -v python3 2>/dev/null || true)"
+fi
+[ -n "$PYBIN" ] || fail "未检测到 Python 3 运行环境。请先在应用中心安装「Python 3.12」运行环境后重试。"
+
+# 2. 架构提示（应用本身为纯 Python，任何架构均可运行）
+case "${TRIM_SYS_ARCH:-x86_64}" in
+    x86_64|amd64|arm64|aarch64|x86|armv7l) ;;
+    *) : ;;
+esac
+
+# 3. 磁盘空间粗查（应用本体很小，仅做提示性检查）
+mkdir -p "${TRIM_PKGVAR:-/tmp}" 2>/dev/null || true
+
+exit 0

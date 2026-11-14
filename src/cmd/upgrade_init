@@ -1,0 +1,13 @@
+#!/bin/bash
+# 升级前：应用中心会自动停止旧进程，这里只做兜底清理
+set -u
+
+DEST="${TRIM_APPDEST:-}"
+if [ -n "$DEST" ] && [ -f "${DEST}/ysp-live.py" ]; then
+    for p in $(pgrep -f "${DEST}/ysp-live.py" 2>/dev/null); do
+        kill -TERM "$p" 2>/dev/null || true
+    done
+    sleep 1
+fi
+
+exit 0

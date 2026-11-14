@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "ysplive.Application": {
+            "title": "央视频直播",
+            "icon": "images/icon_{0}.png",
+            "type": "url",
+            "protocol": "http",
+            "port": "${wizard_port}",
+            "url": "/",
+            "allUsers": true
+        }
+    }
+}

@@ -1,0 +1,8 @@
+#!/bin/bash
+# 卸载后：清理可能残留的进程与临时文件
+set -u
+
+rm -f "${TRIM_PKGVAR}/app.pid" 2>/dev/null || true
+rm -rf "${TRIM_PKGVAR}/tmp" 2>/dev/null || true
+
+exit 0

@@ -1,0 +1,92 @@
+[
+  {
+    "stepTitle": "服务端口",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "ysplive 会以 HTTP 常驻运行（IPv4 / IPv6 双栈）：同一端口既是<b>网页管理界面</b>（可改频道、可直接播放直播），也是<b>订阅服务</b>。<br>默认端口 <b>8767</b>：管理界面 <b>http://NAS_IP:端口/</b>，订阅地址 <b>http://NAS_IP:端口/all.m3u</b>（IPv6 环境下用 <b>http://[IPv6地址]:端口/</b>），桌面图标也指向它。<br>若设备上已运行旧版 Docker 版 ysp-live 并占用了 8767，请先停止该容器，或在此改用其它端口。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_port",
+        "label": "服务端口（管理界面 / 订阅）",
+        "initValue": "8767",
+        "rules": [
+          {
+            "required": true,
+            "message": "请填写服务端口"
+          },
+          {
+            "pattern": "^[0-9]{4,5}$",
+            "message": "端口需为 4-5 位数字，范围 1024-65535"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "stepTitle": "播放参数",
+    "items": [
+      {
+        "type": "radio",
+        "field": "wizard_mode",
+        "label": "高码率模式",
+        "initValue": "all",
+        "options": [
+          {
+            "label": "全部高码率（推荐）",
+            "value": "all"
+          },
+          {
+            "label": "仅 4K/8K 频道高码率",
+            "value": "only4k"
+          },
+          {
+            "label": "纯 1080p（最省资源）",
+            "value": "no4k"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "field": "wizard_links",
+        "label": "单设备并发路数",
+        "initValue": "6",
+        "rules": [
+          {
+            "pattern": "^[0-9]{1,2}$",
+            "message": "请输入 0-99 的整数"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "field": "wizard_debounce",
+        "label": "换台防抖秒数",
+        "initValue": "10",
+        "rules": [
+          {
+            "pattern": "^[0-9]{1,3}$",
+            "message": "请输入 0-120 的整数"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "field": "wizard_cache",
+        "label": "分片内存缓存 (MB)",
+        "initValue": "200",
+        "rules": [
+          {
+            "pattern": "^[0-9]{1,4}$",
+            "message": "请输入 0-2048 的整数"
+          }
+        ]
+      },
+      {
+        "type": "tips",
+        "helpText": "<b>并发路数</b>：同时占用高码率设备配额的上限，0 表示关闭主动轮换。<br><b>换台防抖</b>：切台后先给 1080p，停留超过该秒数才请求高码率，0 表示关闭。<br><b>内存缓存</b>：TS 分片缓存大小，内存紧张的设备可调小。"
+      }
+    ]
+  }
+]

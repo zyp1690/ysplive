@@ -1,0 +1,4 @@
+#!/bin/bash
+# 修改配置前：无需操作
+set -u
+exit 0

@@ -1,0 +1,69 @@
+#!/bin/bash
+# 修改配置后：写入配置、同步桌面入口端口、按需重启
+set -u
+
+CONF="${TRIM_PKGETC}/config.conf"
+UI_CONF="${TRIM_APPDEST}/ui/config"
+
+fail() {
+    printf '%s\n' "$1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+}
+
+OLD_PORT=""
+[ -r "$CONF" ] && OLD_PORT="$(sed -n 's/^PORT=//p' "$CONF" 2>/dev/null | head -n 1)"
+
+PORT="${wizard_port:-${OLD_PORT:-8767}}"
+MODE="${wizard_mode:-all}"
+LINKS="${wizard_links:-6}"
+DEBOUNCE="${wizard_debounce:-10}"
+CACHE_MB="${wizard_cache:-200}"
+
+case "$PORT" in
+    ''|*[!0-9]*) fail "服务端口必须是数字。" ;;
+esac
+if [ "$PORT" -lt 1024 ] || [ "$PORT" -gt 65535 ]; then
+    fail "服务端口需在 1024–65535 之间，当前填写：${PORT}"
+fi
+
+# 端口变化时才做占用检查（沿用旧端口时本应用自己正在监听）
+if [ "$PORT" != "$OLD_PORT" ]; then
+    if (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then
+        fail "端口 ${PORT} 已被其他服务占用，请换一个端口。"
+    fi
+fi
+
+case "$MODE" in all|only4k|no4k) ;; *) MODE=all ;; esac
+case "$LINKS" in ''|*[!0-9]*) LINKS=6 ;; esac
+[ "$LINKS" -le 99 ] || LINKS=6
+case "$DEBOUNCE" in ''|*[!0-9]*) DEBOUNCE=10 ;; esac
+[ "$DEBOUNCE" -le 120 ] || DEBOUNCE=10
+case "$CACHE_MB" in ''|*[!0-9]*) CACHE_MB=200 ;; esac
+[ "$CACHE_MB" -le 2048 ] || CACHE_MB=200
+
+cat > "$CONF" <<EOF
+# ysplive 运行配置（由飞牛应用中心生成）
+PORT=${PORT}
+MODE=${MODE}
+LINKS=${LINKS}
+DEBOUNCE=${DEBOUNCE}
+CACHE_MB=${CACHE_MB}
+EOF
+
+if [ -f "$UI_CONF" ]; then
+    sed -i "s/\"port\": \"[^\"]*\"/\"port\": \"${PORT}\"/" "$UI_CONF" 2>/dev/null || true
+fi
+
+if [ "$(id -u)" = "0" ] && [ -n "${TRIM_USERNAME:-}" ]; then
+    chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME:-$TRIM_USERNAME}" "${TRIM_PKGETC}" 2>/dev/null || true
+fi
+
+# 配置变更后重启应用使其生效（沿用旧端口也要重启，高码率参数会重新加载）
+CMD_MAIN="$(cd "$(dirname "$0")" 2>/dev/null && pwd)/main"
+[ -x "$CMD_MAIN" ] || CMD_MAIN="/var/apps/${TRIM_APPNAME:-ysplive}/cmd/main"
+if [ -x "$CMD_MAIN" ]; then
+    "$CMD_MAIN" stop >/dev/null 2>&1 || true
+    "$CMD_MAIN" start >/dev/null 2>&1 || true
+fi
+
+exit 0

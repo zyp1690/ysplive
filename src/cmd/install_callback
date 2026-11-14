@@ -1,0 +1,80 @@
+#!/bin/bash
+# 安装后：写入运行配置、校验端口、同步桌面入口端口
+set -u
+
+CONF="${TRIM_PKGETC}/config.conf"
+APPNAME="${TRIM_APPNAME:-ysplive}"
+
+fail() {
+    printf '%s\n' "$1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+}
+
+PORT="${wizard_port:-8767}"
+MODE="${wizard_mode:-all}"
+LINKS="${wizard_links:-6}"
+DEBOUNCE="${wizard_debounce:-10}"
+CACHE_MB="${wizard_cache:-200}"
+
+# ---- 校验（向导值一律视为不可信输入）----
+case "$PORT" in
+    ''|*[!0-9]*) fail "服务端口必须是数字，请返回上一步重新填写。" ;;
+esac
+if [ "$PORT" -lt 1024 ] || [ "$PORT" -gt 65535 ]; then
+    fail "服务端口需在 1024–65535 之间，当前填写：${PORT}"
+fi
+
+case "$MODE" in
+    all|only4k|no4k) ;;
+    *) MODE=all ;;
+esac
+
+case "$LINKS" in ''|*[!0-9]*) LINKS=6 ;; esac
+[ "$LINKS" -le 99 ] || LINKS=6
+case "$DEBOUNCE" in ''|*[!0-9]*) DEBOUNCE=10 ;; esac
+[ "$DEBOUNCE" -le 120 ] || DEBOUNCE=10
+case "$CACHE_MB" in ''|*[!0-9]*) CACHE_MB=200 ;; esac
+[ "$CACHE_MB" -le 2048 ] || CACHE_MB=200
+
+# ---- 端口占用检查 ----
+OLD_PORT=""
+[ -r "$CONF" ] && OLD_PORT="$(sed -n 's/^PORT=//p' "$CONF" 2>/dev/null | head -n 1)"
+if [ "$PORT" != "$OLD_PORT" ]; then
+    if (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then
+        fail "端口 ${PORT} 已被其他服务占用，请返回上一步换一个端口。若占用者是旧的 Docker 版 ysp-live，请先停止该容器。"
+    fi
+fi
+
+# ---- 运行环境 ----
+PYBIN=""
+for c in /var/apps/python312/target/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
+    [ -x "$c" ] && { PYBIN="$c"; break; }
+done
+[ -n "$PYBIN" ] || PYBIN="$(command -v python3 2>/dev/null || true)"
+[ -n "$PYBIN" ] || fail "未检测到 Python 3 运行环境，安装已中止。"
+
+mkdir -p "${TRIM_PKGVAR}/data" "${TRIM_PKGETC}" 2>/dev/null || true
+
+# ---- 写配置 ----
+cat > "$CONF" <<EOF
+# ysplive 运行配置（由飞牛应用中心生成）
+PORT=${PORT}
+MODE=${MODE}
+LINKS=${LINKS}
+DEBOUNCE=${DEBOUNCE}
+CACHE_MB=${CACHE_MB}
+EOF
+
+# ---- 桌面入口端口同步 ----
+UI_CONF="${TRIM_APPDEST}/ui/config"
+if [ -f "$UI_CONF" ]; then
+    sed -i "s/\"port\": \"[^\"]*\"/\"port\": \"${PORT}\"/" "$UI_CONF" 2>/dev/null || true
+fi
+
+# ---- root 执行时纠正属主 ----
+if [ "$(id -u)" = "0" ] && [ -n "${TRIM_USERNAME:-}" ]; then
+    chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME:-$TRIM_USERNAME}" "${TRIM_PKGVAR}" 2>/dev/null || true
+    chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME:-$TRIM_USERNAME}" "${TRIM_PKGETC}" 2>/dev/null || true
+fi
+
+exit 0

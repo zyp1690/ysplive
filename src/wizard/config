@@ -1,0 +1,83 @@
+[
+  {
+    "stepTitle": "修改运行配置",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "提交后会覆盖当前运行配置并重启应用，正在播放的流会短暂中断。<br>请按实际需要调整后再提交；若无需改动，直接退出此页面即可。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_port",
+        "label": "服务端口（管理界面 / 订阅）",
+        "initValue": "8767",
+        "rules": [
+          {
+            "required": true,
+            "message": "请填写服务端口"
+          },
+          {
+            "pattern": "^[0-9]{4,5}$",
+            "message": "端口需为 4-5 位数字，范围 1024-65535"
+          }
+        ]
+      },
+      {
+        "type": "radio",
+        "field": "wizard_mode",
+        "label": "高码率模式",
+        "initValue": "all",
+        "options": [
+          {
+            "label": "全部高码率（推荐）",
+            "value": "all"
+          },
+          {
+            "label": "仅 4K/8K 频道高码率",
+            "value": "only4k"
+          },
+          {
+            "label": "纯 1080p（最省资源）",
+            "value": "no4k"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "field": "wizard_links",
+        "label": "单设备并发路数",
+        "initValue": "6",
+        "rules": [
+          {
+            "pattern": "^[0-9]{1,2}$",
+            "message": "请输入 0-99 的整数"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "field": "wizard_debounce",
+        "label": "换台防抖秒数",
+        "initValue": "10",
+        "rules": [
+          {
+            "pattern": "^[0-9]{1,3}$",
+            "message": "请输入 0-120 的整数"
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "field": "wizard_cache",
+        "label": "分片内存缓存 (MB)",
+        "initValue": "200",
+        "rules": [
+          {
+            "pattern": "^[0-9]{1,4}$",
+            "message": "请输入 0-2048 的整数"
+          }
+        ]
+      }
+    ]
+  }
+]

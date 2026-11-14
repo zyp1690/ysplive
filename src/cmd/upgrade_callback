@@ -1,0 +1,35 @@
+#!/bin/bash
+# 升级后：保留原有配置，仅同步桌面入口端口
+set -u
+
+CONF="${TRIM_PKGETC}/config.conf"
+UI_CONF="${TRIM_APPDEST}/ui/config"
+
+PORT=""
+if [ -r "$CONF" ]; then
+    PORT="$(sed -n 's/^PORT=//p' "$CONF" 2>/dev/null | head -n 1)"
+fi
+if [ -z "$PORT" ]; then
+    PORT="${TRIM_SERVICE_PORT:-8767}"
+    mkdir -p "${TRIM_PKGETC}" 2>/dev/null || true
+    cat > "$CONF" <<EOF
+# ysplive 运行配置
+PORT=${PORT}
+MODE=all
+LINKS=6
+DEBOUNCE=10
+CACHE_MB=200
+EOF
+fi
+
+if [ -f "$UI_CONF" ] && [ -n "$PORT" ]; then
+    sed -i "s/\"port\": \"[^\"]*\"/\"port\": \"${PORT}\"/" "$UI_CONF" 2>/dev/null || true
+    sed -i "s/\${wizard_port}/${PORT}/" "$UI_CONF" 2>/dev/null || true
+fi
+
+if [ "$(id -u)" = "0" ] && [ -n "${TRIM_USERNAME:-}" ]; then
+    chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME:-$TRIM_USERNAME}" "${TRIM_PKGVAR}" 2>/dev/null || true
+    chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME:-$TRIM_USERNAME}" "${TRIM_PKGETC}" 2>/dev/null || true
+fi
+
+exit 0

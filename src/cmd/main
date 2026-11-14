@@ -1,0 +1,272 @@
+#!/bin/bash
+# ysplive 启停脚本（飞牛 fnOS 原生应用）
+# 双进程：内部引擎 ysp-live.py 只监听 127.0.0.1:8788；管理界面 ui-server.py 对外监听 $PORT（默认 8767）
+# status 退出码：0=运行中，3=未运行
+
+set -u
+
+APPNAME="${TRIM_APPNAME:-ysplive}"
+DEST="${TRIM_APPDEST:-$(cd "$(dirname "$0")/../app" 2>/dev/null && pwd)}"
+VAR="${TRIM_PKGVAR:-/tmp/${APPNAME}-var}"
+ETC="${TRIM_PKGETC:-/tmp/${APPNAME}-etc}"
+ENGINE="${DEST}/ysp-live.py"
+UI="${DEST}/ui-server.py"
+WEB="${DEST}/web/index.html"
+
+VAR_DIR_OK=1
+for d in "$VAR" "$VAR/data"; do
+    [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || VAR_DIR_OK=0
+done
+[ "$VAR_DIR_OK" = "1" ] || { echo "运行时目录 ${VAR} 不可写" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"; exit 1; }
+
+ENGINE_PID="${VAR}/engine.pid"
+UI_PID="${VAR}/ui.pid"
+LOG_FILE="${VAR}/info.log"
+CONF="${ETC}/config.conf"
+
+# 日志优先写到共享目录（文件管理器中可见），不可用时回退到 var
+if [ -n "${TRIM_DATA_SHARE_PATHS:-}" ]; then
+    share="${TRIM_DATA_SHARE_PATHS%%:*}"
+    if [ -n "$share" ] && [ -d "$share" ] && [ -w "$share" ]; then
+        LOG_FILE="${share}/info.log"
+    fi
+fi
+
+# ---- 默认参数，可被 config.conf 覆盖 ----
+PORT=8767
+ENGINE_PORT=8788
+MODE=all
+LINKS=6
+DEBOUNCE=10
+CACHE_MB=200
+
+if [ -r "$CONF" ]; then
+    # shellcheck disable=SC1090
+    . "$CONF" 2>/dev/null || true
+fi
+
+# ---- 参数二次校验（配置视为不可信输入）----
+case "$PORT" in
+    ''|*[!0-9]*) PORT=8767 ;;
+    *) [ "$PORT" -ge 1024 ] && [ "$PORT" -le 65535 ] || PORT=8767 ;;
+esac
+case "$MODE" in
+    all|only4k|no4k) ;;
+    *) MODE=all ;;
+esac
+case "$LINKS" in
+    ''|*[!0-9]*) LINKS=6 ;;
+    *) [ "$LINKS" -le 99 ] || LINKS=6 ;;
+esac
+case "$DEBOUNCE" in
+    ''|*[!0-9]*) DEBOUNCE=10 ;;
+    *) [ "$DEBOUNCE" -le 120 ] || DEBOUNCE=10 ;;
+esac
+case "$CACHE_MB" in
+    ''|*[!0-9]*) CACHE_MB=200 ;;
+    *) [ "$CACHE_MB" -le 2048 ] || CACHE_MB=200 ;;
+esac
+
+log_msg() {
+    printf '%s - %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >> "$LOG_FILE" 2>/dev/null
+}
+
+fail() {
+    log_msg "ERROR: $1"
+    printf '%s\n' "$1" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    exit 1
+}
+
+# 选择 Python：优先飞牛运行时包，其次系统解释器
+pick_python() {
+    for c in \
+        /var/apps/python312/target/bin/python3 \
+        /usr/local/bin/python3 \
+        /usr/bin/python3; do
+        [ -x "$c" ] && { printf '%s' "$c"; return 0; }
+    done
+    command -v python3 2>/dev/null || return 1
+}
+
+# 校验 pid 属于指定脚本，避免 pid 复用误杀
+check_process() {
+    local pid="$1" pattern="$2"
+    [ -n "$pid" ] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    if [ -r "/proc/$pid/cmdline" ]; then
+        cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ' | grep -q "$pattern" || return 1
+    fi
+    return 0
+}
+
+read_pid() {
+    local file="$1" pid
+    [ -r "$file" ] || return 1
+    pid="$(head -n 1 "$file" | tr -d '[:space:]')"
+    [ -n "$pid" ] || return 1
+    printf '%s' "$pid"
+}
+
+port_listening() {
+    (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+
+# 等待端口可连；检测到子进程长时间不存在则判定失败
+wait_port() {
+    local pid="$1" port="$2" pattern="$3" name="$4"
+    local n=0 miss=0
+    while [ "$n" -lt 60 ]; do
+        if check_process "$pid" "$pattern"; then
+            miss=0
+            if port_listening "$port"; then
+                log_msg "${name} 就绪 pid=${pid} port=${port}"
+                return 0
+            fi
+        else
+            # 刚 fork 的子进程尚未 exec，前几轮 cmdline 还属于父 shell，属正常现象
+            miss=$((miss + 1))
+            if [ "$miss" -ge 10 ]; then
+                kill -TERM "$pid" 2>/dev/null || true
+                return 1
+            fi
+        fi
+        sleep 0.5
+        n=$((n + 1))
+    done
+    log_msg "WARN: ${name} 30 秒内未监听 ${port}，进程仍在运行 pid=${pid}"
+    return 0
+}
+
+start_engine() {
+    local pid
+    if pid="$(read_pid "$ENGINE_PID")" && check_process "$pid" ysp-live.py; then
+        log_msg "engine already running (pid=${pid}), skip"
+        return 0
+    fi
+    [ -f "$ENGINE" ] || fail "引擎文件缺失：${ENGINE}，请重新安装应用"
+
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONIOENCODING=utf-8 \
+    TZ=Asia/Shanghai \
+    "$PYBIN" "$ENGINE" "$ENGINE_PORT" \
+        --bind 127.0.0.1 \
+        --no-engine \
+        --data-dir "$VAR/data" \
+        --cache-mb "$CACHE_MB" \
+        --links-per-device "$LINKS" \
+        --zap-debounce "$DEBOUNCE" \
+        $( [ "$MODE" = "only4k" ] && printf '%s' "--only-4k" ) \
+        $( [ "$MODE" = "no4k" ] && printf '%s' "--no-4k" ) \
+        >> "$LOG_FILE" 2>&1 &
+
+    echo "$!" > "$ENGINE_PID"
+    wait_port "$!" "$ENGINE_PORT" ysp-live.py "引擎" || fail "引擎启动失败，请查看日志：${LOG_FILE}"
+}
+
+start_ui() {
+    local pid
+    if pid="$(read_pid "$UI_PID")" && check_process "$pid" ui-server.py; then
+        log_msg "ui already running (pid=${pid}), skip"
+        return 0
+    fi
+    [ -f "$UI" ] || fail "界面文件缺失：${UI}，请重新安装应用"
+    [ -f "$WEB" ] || fail "界面资源缺失：${WEB}，请重新安装应用"
+
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONIOENCODING=utf-8 \
+    TZ=Asia/Shanghai \
+    "$PYBIN" "$UI" --port "$PORT" --engine-port "$ENGINE_PORT" --data "$VAR/data" \
+        >> "$LOG_FILE" 2>&1 &
+
+    echo "$!" > "$UI_PID"
+    wait_port "$!" "$PORT" ui-server.py "管理界面" || fail "管理界面启动失败，请查看日志：${LOG_FILE}"
+}
+
+start_process() {
+    [ -f "$ENGINE" ] || fail "程序文件缺失：${ENGINE}，请重新安装应用"
+    PYBIN="$(pick_python)" || fail "未找到可用的 Python 运行环境，请确认运行环境 python312 已安装"
+
+    log_msg "starting: engine=${ENGINE_PORT}(127.0.0.1) ui=${PORT}(0.0.0.0) python=${PYBIN}"
+    cd "$DEST" || fail "无法进入应用目录 ${DEST}"
+
+    start_engine || exit 1
+    start_ui || { stop_engine; exit 1; }
+    log_msg "started ok: 管理界面 http://0.0.0.0:${PORT}/  订阅 http://0.0.0.0:${PORT}/all.m3u"
+    return 0
+}
+
+stop_one() {
+    local pidfile="$1" pattern="$2" name="$3" pid n
+    if ! pid="$(read_pid "$pidfile")"; then
+        rm -f "$pidfile"
+        return 0
+    fi
+    if ! check_process "$pid" "$pattern"; then
+        log_msg "${name} ${pid} 未在运行，清理 pid 文件"
+        rm -f "$pidfile"
+        return 0
+    fi
+
+    log_msg "停止 ${name} pid=${pid}"
+    kill -TERM "$pid" 2>/dev/null
+    n=0
+    while check_process "$pid" "$pattern" && [ "$n" -lt 20 ]; do
+        sleep 0.5
+        n=$((n + 1))
+    done
+    if check_process "$pid" "$pattern"; then
+        log_msg "${name} 超时，强制结束 pid=${pid}"
+        kill -KILL "$pid" 2>/dev/null
+        sleep 1
+    fi
+    rm -f "$pidfile"
+}
+
+stop_engine() { stop_one "$ENGINE_PID" ysp-live.py "引擎"; }
+
+stop_process() {
+    # 先停对外界面，再停内部引擎
+    stop_one "$UI_PID" ui-server.py "管理界面"
+    stop_engine
+
+    # 兜底：清理遗留的同类进程（仅限本应用脚本路径）
+    for p in $(pgrep -f "${ENGINE}" 2>/dev/null) $(pgrep -f "${UI}" 2>/dev/null); do
+        [ "$p" = "$$" ] && continue
+        log_msg "清理遗留进程 pid=${p}"
+        kill -TERM "$p" 2>/dev/null
+    done
+
+    log_msg "已停止"
+    return 0
+}
+
+is_running() {
+    local ep ip
+    ep="$(read_pid "$ENGINE_PID")" || return 1
+    ip="$(read_pid "$UI_PID")" || return 1
+    check_process "$ep" ysp-live.py || return 1
+    check_process "$ip" ui-server.py || return 1
+    return 0
+}
+
+case "${1:-}" in
+    start)
+        start_process
+        ;;
+    stop)
+        stop_process
+        ;;
+    status)
+        if is_running; then
+            exit 0
+        else
+            exit 3
+        fi
+        ;;
+    *)
+        printf 'Usage: %s {start|stop|status}\n' "$0" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+        exit 1
+        ;;
+esac
