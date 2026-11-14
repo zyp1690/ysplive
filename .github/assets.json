@@ -1,0 +1,32 @@
+{
+  "note": "本文件声明仓库里需要落地的二进制资产，由 .github/workflows/fetch-assets.yml 在 main 分支拉取、校验 sha256 后提交回仓库。落地完成后仓库自身即可自证完整性。",
+  "assets": [
+    {
+      "path": "ysplive/fpk/ysplive-1.1.5-fnos-all.fpk",
+      "url": "https://aka.doubaocdn.com/s/eqvpF69W3P",
+      "sha256": "ca0ad3e372232851657841286ef93f3625d4d00ee625f7366e4eb59426ae94d9"
+    },
+    {
+      "path": "ysplive/ICON.PNG",
+      "url": "https://aka.doubaocdn.com/s/BfaLpUiiWo",
+      "sha256": "9ee2f48b9e7b3fd150bd0df92b789cd3e1971f853caedb186459de312aa9578a"
+    },
+    {
+      "path": "ysplive/ICON_256.PNG",
+      "url": "https://aka.doubaocdn.com/s/k6TecwH69S",
+      "sha256": "6bd38084c67bd1e0c39fa70ac22ce2199216b3f7e546f4ffae381ad9e9e5aadd"
+    },
+    {
+      "path": "ysplive/README.md",
+      "url": "https://aka.doubaocdn.com/s/kv2T3PPNUf",
+      "sha256": ""
+    },
+    {
+      "path": "src",
+      "url": "https://aka.doubaocdn.com/s/EX7eVhRrAV",
+      "sha256": "0317b9d8ad1c5c49a4c3c056b972f6373ca03f7c8f7355a7072fc30f78b76850",
+      "archive": "tar.gz",
+      "strip_components": 1
+    }
+  ]
+}
