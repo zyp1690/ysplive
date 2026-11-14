@@ -1,0 +1,103 @@
+name: fetch-assets
+
+# 按 .github/assets.json 的声明，把 FPK / 图标 / 应用详情页 / 源码包落地到仓库，并提交回 main。
+# 只在 assets.json 或本工作流变更时触发；回写提交不触碰这两个文件，因此不会循环。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/assets.json"
+      - ".github/workflows/fetch-assets.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载、校验并落地
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, pathlib, shutil, tarfile, urllib.request
+          root = pathlib.Path('.')
+          spec = json.loads((root / '.github/assets.json').read_text('utf-8'))
+          tmp = root / '.asset-tmp'
+          shutil.rmtree(tmp, ignore_errors=True)
+          tmp.mkdir()
+          for a in spec['assets']:
+              dest = root / a['path']
+              url = a['url']
+              f = tmp / ('download-' + hashlib.md5(url.encode()).hexdigest())
+              print(f'GET {url}')
+              req = urllib.request.Request(url, headers={'User-Agent': 'ysplive-ci'})
+              with urllib.request.urlopen(req, timeout=120) as r, open(f, 'wb') as out:
+                  shutil.copyfileobj(r, out)
+              want = (a.get('sha256') or '').lower()
+              got = hashlib.sha256(f.read_bytes()).hexdigest()
+              if want and got != want:
+                  raise SystemExit(f'sha256 mismatch for {a["path"]}: {got} != {want}')
+              print(f'  {a["path"]}: {f.stat().st_size} bytes sha256={got}')
+
+              if a.get('archive') == 'tar.gz':
+                  shutil.rmtree(dest, ignore_errors=True)
+                  dest.mkdir(parents=True)
+                  with tarfile.open(f, 'r:gz') as tf:
+                      strip = int(a.get('strip_components', 0))
+                      for m in tf.getmembers():
+                          parts = pathlib.PurePosixPath(m.name).parts[strip:]
+                          if not parts:
+                              continue
+                          target = dest.joinpath(*parts)
+                          if m.isdir():
+                              target.mkdir(parents=True, exist_ok=True)
+                          elif m.isfile():
+                              target.parent.mkdir(parents=True, exist_ok=True)
+                              with tf.extractfile(m) as src, open(target, 'wb') as out:
+                                  shutil.copyfileobj(src, out)
+                  print(f'  extracted -> {dest}')
+              else:
+                  dest.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(f, dest)
+          shutil.rmtree(tmp, ignore_errors=True)
+          PY
+
+      - name: 校验 fnpack.json 与 FPK 一致
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, sys
+          root = pathlib.Path('.')
+          idx = json.loads((root / 'fnpack.json').read_text('utf-8'))
+          ok = True
+          for name, app in idx['apps'].items():
+              print(f'app {name}: platform={app["platform"]} categories={app["categories"]}')
+              for ver, rel in app['releases'].items():
+                  for arch, pkg in rel['packages'].items():
+                      f = (root / pkg['download_url'].lstrip('./')).resolve()
+                      if not f.exists():
+                          print(f'  MISSING {f}'); ok = False; continue
+                      size = f.stat().st_size
+                      sha = hashlib.sha256(f.read_bytes()).hexdigest()
+                      if size != pkg.get('size'):
+                          print(f'  SIZE MISMATCH: {size} != {pkg.get("size")}'); ok = False
+                      if sha != pkg.get('sha256'):
+                          print(f'  SHA256 MISMATCH: {sha} != {pkg.get("sha256")}'); ok = False
+                      print(f'  OK {name} {ver} {arch}: {size} bytes sha256={sha}')
+          sys.exit(0 if ok else 1)
+          PY
+
+      - name: 提交落地结果
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "没有需要提交的变更"; exit 0
+          fi
+          git commit -m "chore: 落地 FPK / 图标 / 源码 [skip ci]"
+          git push
