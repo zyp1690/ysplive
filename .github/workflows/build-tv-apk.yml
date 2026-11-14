@@ -1,7 +1,7 @@
 name: build-tv-apk
 
 # 从 .github/tv-assets.json 拉取 tv-app 源码（tar.gz）落到仓库，
-# 再用 tv-app/build.sh 构建 APK，挂到 Release tv-v1.0.0。
+# 再用 tv-app/build.sh 构建 APK，挂到 Release。失败也会把构建日志提交到 ci/build-tv.log 便于排查。
 
 on:
   push:
@@ -71,20 +71,50 @@ jobs:
           fi
 
       - name: 构建 APK
+        shell: bash
         run: |
-          set -euo pipefail
+          set -o pipefail
           cd tv-app
-          bash build.sh
-          ls -l *.apk
-          sha256sum *.apk
+          bash build.sh 2>&1 | tee build.log
+
+      - name: 记录构建日志
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p ci
+          {
+            echo "# 最近一次 tv-apk 构建日志（run $GITHUB_RUN_NUMBER）"
+            echo
+            echo '```'
+            tail -n 120 tv-app/build.log 2>/dev/null || echo "(无 build.log)"
+            echo '```'
+          } > ci/build-tv.log
+          git add ci/build-tv.log
+          if git diff --cached --quiet; then
+            echo "日志无变化"
+          else
+            git commit -m "chore: tv-apk 构建日志 [skip ci]"
+            git push
+          fi
 
       - name: 发布到 Release
+        if: success()
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN_NO: ${{ github.run_number }}
+        shell: bash
         run: |
           set -euo pipefail
           cd tv-app
           APK=$(ls ysplive-tv-v*.apk | head -1)
-          NOTES=$'安卓电视/手机客户端（Android 4.0+，API 14 起）\n\n- 连你 NAS 上的 ysplive（默认 8767 端口），原生 MediaPlayer 播 HLS，不依赖 hls.js/MSE\n- 遥控：↑↓ 选台，←→ 上下台，OK 开/收左栏，返回收起，菜单改地址\n- 安装后先填 NAS 地址与端口\n\n源码在仓库 tv-app/ 目录，构建命令：bash build.sh'
-          gh release create "tv-v${GITHUB_RUN_NUMBER}-apk" --title "ysplive TV APK" --notes "$NOTES" "$APK" \
-            || gh release upload "tv-v${GITHUB_RUN_NUMBER}-apk" "$APK" --clobber
+          TAG="tv-v${RUN_NO}-apk"
+          printf '%s\n' \
+            '安卓电视/手机客户端（Android 4.0+，API 14 起）' \
+            '' \
+            '- 连你 NAS 上的 ysplive（默认 8767 端口），原生 MediaPlayer 播 HLS，不依赖 hls.js/MSE' \
+            '- 遥控：↑↓ 选台，←→ 上下台，OK 开/收左栏，返回收起，菜单改地址' \
+            '- 安装后先填 NAS 地址与端口' \
+            '' \
+            '源码在仓库 tv-app/ 目录，构建命令：bash build.sh' > /tmp/notes.txt
+          gh release create "$TAG" --title "ysplive TV APK ($TAG)" --notes-file /tmp/notes.txt "$APK" \
+            || gh release upload "$TAG" "$APK" --clobber
