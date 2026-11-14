@@ -1,0 +1,56 @@
+{
+  "schema_version": "2",
+  "source_info": {
+    "name": "火舞应用源",
+    "author": "火舞狂沙",
+    "homepage": "https://github.com/zyp1690",
+    "description": "火舞狂沙维护的飞牛 fnOS 应用源，全部为原生 FPK 应用，免 Docker，装完即用。",
+    "i18n": {
+      "en-US": {
+        "name": "Huowu fnOS Source",
+        "description": "Native FPK apps for fnOS maintained by Huowu Kuangsha. No Docker required."
+      }
+    }
+  },
+  "apps": {
+    "ysplive": {
+      "display_name": "ysplive 央视频直播",
+      "desc": "把央视频直播搬进飞牛 NAS：原生 FPK 应用，免 Docker，装完桌面点开即用。<br>三栏电视式界面（频道列表 / 频道信息 / 直播画面），带真实节目单；点「立即收看」进入全屏播放，点画面弹出半透明选台浮层，点一行即刻换台。<br>网页可播放，频道地址在管理面板里可编辑（支持自定义频道、分组、台标），同时对外输出标准 M3U 订阅给电视和播放器；界面同时监听 IPv4 与 IPv6。",
+      "platform": [
+        "all"
+      ],
+      "categories": [
+        "影音娱乐"
+      ],
+      "icon_url": "./ysplive/ICON.PNG",
+      "preview_urls": [
+        "https://aka.doubaocdn.com/s/iMURPHToR7",
+        "https://aka.doubaocdn.com/s/eqkMlI4DvJ",
+        "https://aka.doubaocdn.com/s/kHW9ioy2lO",
+        "https://aka.doubaocdn.com/s/SLcZSKEBVe"
+      ],
+      "readme_url": "./ysplive/README.md",
+      "bug_report_url": "https://github.com/zyp1690/ysplive/issues",
+      "maintainer": "火舞狂沙",
+      "maintainer_url": "https://github.com/zyp1690/ysplive",
+      "run_as": "package",
+      "install_type": "",
+      "is_docker": false,
+      "service_port": "8767",
+      "releases": {
+        "1.1.5": {
+          "changelog": "修复「点画面空白收不起选台浮层」：浮层与画面各挂了一个点击处理器，前者刚关闭、后者立刻重开，现合并为单一处理器。同时包含：浮层两块面板合并为一张连体卡片（无缝隙、无透底）、换台后频道栏自动收起、播放态右上新增「管理」入口（全屏下也能进管理面板）、浮层打开时隐藏底部线路条。",
+          "updated_at": "2026-11-14T18:08:00+08:00",
+          "os_min_version": "0.9.0",
+          "packages": {
+            "all": {
+              "download_url": "./ysplive/fpk/ysplive-1.1.5-fnos-all.fpk",
+              "sha256": "ca0ad3e372232851657841286ef93f3625d4d00ee625f7366e4eb59426ae94d9",
+              "size": 394198
+            }
+          }
+        }
+      }
+    }
+  }
+}
