@@ -1,4 +1,4 @@
-# 最近一次 tv-apk 构建日志（run 5）
+# 最近一次 tv-apk 构建日志（run 6）
 
 ```
 java: openjdk version "25.0.5" 2026-10-20 LTS
@@ -7,72 +7,16 @@ javac: /usr/bin/javac
 [1/6] 下载 Android platform 32 ...
 [2/6] aapt2 compile 资源 ...
 [3/6] aapt2 link 生成未签名包与 R.java ...
-[4/6] 编译 Java ...
+[4/6] 编译 Java（优先 ECJ，固定 class 版本 52 以保证 d8 兼容）...
 [5/6] d8 生成 dex 并打包 ...
-Error in build/classes/com/huowu/ysplivetv/MainActivity$1.class:
-java.lang.NullPointerException: Cannot invoke "String.length()" because "<parameter1>" is null
-Compilation failed with an internal error.
-Exception in thread "main" java.lang.RuntimeException: com.android.tools.r8.CompilationFailedException: Compilation failed to complete, origin: build/classes/com/huowu/ysplivetv/MainActivity$1.class
-	at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:98)
-	at com.android.tools.r8.D8.main(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:4)
-Caused by: com.android.tools.r8.CompilationFailedException: Compilation failed to complete, origin: build/classes/com/huowu/ysplivetv/MainActivity$1.class
-	at Version.fakeStackEntry(Version_3.3.20-dev+aosp5.java:0)
-	at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:75)
-	at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:28)
-	at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:27)
-	at com.android.tools.r8.internal.pj.b(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:2)
-	at com.android.tools.r8.D8.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:22)
-	at com.android.tools.r8.D8.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:17)
-	at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:85)
-	... 1 more
-Caused by: java.lang.NullPointerException: Cannot invoke "String.length()" because "<parameter1>" is null
-	at com.android.tools.r8.graph.d1.<init>(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:5)
-	at com.android.tools.r8.graph.v0.b(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:12)
-	at com.android.tools.r8.graph.w2.b(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:9)
-	at com.android.tools.r8.internal.Ia.b(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:150)
-	at com.android.tools.r8.internal.Ia.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:389)
-	at com.android.tools.r8.graph.x2.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:31)
-	at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:101)
-	at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:102)
-	at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:100)
-	at com.android.tools.r8.graph.x2.b(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:2)
-	at com.android.tools.r8.dex.a.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:26)
-	at java.base/java.util.concurrent.ForkJoinTask$AdaptedInterruptibleCallable.compute(ForkJoinTask.java:1718)
-	at java.base/java.util.concurrent.ForkJoinTask$InterruptibleTask.exec(ForkJoinTask.java:1662)
-	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:511)
-	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1450)
-	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:2019)
-	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:187)
-	Suppressed: java.lang.RuntimeException: java.util.concurrent.ExecutionException: com.android.tools.r8.internal.rj: java.lang.NullPointerException: Cannot invoke "String.length()" because "<parameter1>" is null
-		at com.android.tools.r8.dex.b.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:107)
-		at com.android.tools.r8.dex.b.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:28)
-		at com.android.tools.r8.D8.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:25)
-		at com.android.tools.r8.D8.d(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:609)
-		at com.android.tools.r8.D8.c(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:1)
-		at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:24)
-		at com.android.tools.r8.internal.pj.b(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:2)
-		at com.android.tools.r8.D8.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:22)
-		at com.android.tools.r8.D8.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:17)
-		at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:85)
-		at com.android.tools.r8.D8.main(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:4)
-	Caused by: java.util.concurrent.ExecutionException: com.android.tools.r8.internal.rj: java.lang.NullPointerException: Cannot invoke "String.length()" because "<parameter1>" is null
-		at java.base/java.util.concurrent.ForkJoinTask.getException(ForkJoinTask.java:571)
-		at java.base/java.util.concurrent.ForkJoinTask.reportException(ForkJoinTask.java:580)
-		at java.base/java.util.concurrent.ForkJoinTask.get(ForkJoinTask.java:1022)
-		at com.android.tools.r8.utils.C.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:56)
-		at com.android.tools.r8.dex.b.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:88)
-		... 10 more
-	Caused by: com.android.tools.r8.internal.rj: java.lang.NullPointerException: Cannot invoke "String.length()" because "<parameter1>" is null
-		at com.android.tools.r8.internal.rj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:6)
-		at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:104)
-		at com.android.tools.r8.internal.pj.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:100)
-		at com.android.tools.r8.graph.x2.b(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:2)
-		at com.android.tools.r8.dex.a.a(R8_3.3.20-dev+aosp5_a629c2c3592f558d09a1aa063f8fa13e35ca354216d318a506759ca7374873e0:26)
-		at java.base/java.util.concurrent.ForkJoinTask$AdaptedInterruptibleCallable.compute(ForkJoinTask.java:1718)
-		at java.base/java.util.concurrent.ForkJoinTask$InterruptibleTask.exec(ForkJoinTask.java:1662)
-		at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:511)
-		at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1450)
-		at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:2019)
-		at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:187)
-	Caused by: [CIRCULAR REFERENCE: java.lang.NullPointerException: Cannot invoke "String.length()" because "<parameter1>" is null]
+[6/6] 签名 ...
+    生成构建用的签名（每个构建机独立，覆盖升级需先卸载）
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::loadLibrary has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/home/runner/work/ysplive/ysplive/tv-app/.sdk/android-13/lib/apksigner.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+
+完成：/home/runner/work/ysplive/ysplive/tv-app/ysplive-tv-v1.0.0.apk  (25141 字节)
+d23c0f74d4d442c78497ca6f4ab1aec3a5bd2b4d0b24044cead37d77ca367358  ysplive-tv-v1.0.0.apk
 ```
