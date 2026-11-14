@@ -56,29 +56,19 @@ echo "[3/6] aapt2 link 生成未签名包与 R.java ..."
     --version-code "$VERSION_CODE" \
     --version-name "$VERSION_NAME"
 
-echo "[4/6] 编译 Java ..."
+echo "[4/6] 编译 Java（优先 ECJ，固定 class 版本 52 以保证 d8 兼容）..."
 SRC=$(find "$APP/java" "$BUILD/gen" -name '*.java')
 compiled=0
-if command -v javac >/dev/null 2>&1; then
-    if javac -nowarn -source 8 -target 8 \
-        -bootclasspath "$ANDROID_JAR" \
-        -classpath "$ANDROID_JAR" \
-        -d "$BUILD/classes" $SRC 2>"$BUILD/javac.log"; then
-        compiled=1
-    else
-        echo "    javac 失败，退回 ECJ："
-        tail -n 20 "$BUILD/javac.log" || true
-        rm -rf "$BUILD/classes"
-        mkdir -p "$BUILD/classes"
-    fi
+if curl -fsSL -o "$BUILD/ecj.jar" \
+    "https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.33.0/ecj-3.33.0.jar"; then
+    java -jar "$BUILD/ecj.jar" -nowarn -source 8 -target 8 \
+        -bootclasspath "$ANDROID_JAR" -d "$BUILD/classes" $SRC && compiled=1
 fi
 if [ "$compiled" -eq 0 ]; then
-    echo "    使用 ECJ 编译器"
-    curl -fsSL -o "$BUILD/ecj.jar" \
-        "https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.33.0/ecj-3.33.0.jar"
-    java -jar "$BUILD/ecj.jar" -source 8 -target 8 \
-        -bootclasspath "$ANDROID_JAR" -d "$BUILD/classes" $SRC
-    chmod -R +r "$BUILD/classes" 2>/dev/null || true
+    echo "    ECJ 不可用，退回 javac"
+    javac -nowarn -source 8 -target 8 \
+        -bootclasspath "$ANDROID_JAR" -classpath "$ANDROID_JAR" \
+        -d "$BUILD/classes" $SRC
 fi
 if [ -z "$(find "$BUILD/classes" -name '*.class' 2>/dev/null)" ]; then
     echo "!! 编译没有产出 class 文件"
@@ -86,8 +76,14 @@ if [ -z "$(find "$BUILD/classes" -name '*.class' 2>/dev/null)" ]; then
 fi
 
 echo "[5/6] d8 生成 dex 并打包 ..."
-"$D8" --min-api 14 --lib "$ANDROID_JAR" --output "$BUILD/dex" \
-    $(find "$BUILD/classes" -name '*.class')
+rm -rf "$BUILD/dex"
+mkdir -p "$BUILD/dex"
+if ! "$D8" --min-api 14 --lib "$ANDROID_JAR" --output "$BUILD/dex" \
+        $(find "$BUILD/classes" -name '*.class') 2>"$BUILD/d8.log"; then
+    echo "!! d8 失败："
+    tail -n 30 "$BUILD/d8.log"
+    exit 1
+fi
 cp "$BUILD/base.apk" "$BUILD/unaligned.apk"
 (cd "$BUILD/dex" && zip -q -r "../unaligned.apk" classes.dex)
 "$ZIPALIGN" -p -f 4 "$BUILD/unaligned.apk" "$BUILD/aligned.apk"
