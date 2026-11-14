@@ -4,6 +4,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+echo "java: $(java -version 2>&1 | head -1)"
+echo "javac: $(command -v javac || echo '无（将使用 ECJ）')"
+
 BT_URL="https://dl.google.com/android/repository/build-tools_r33.0.2-linux.zip"
 PLATFORM_URL="https://dl.google.com/android/repository/platform-32_r01.zip"
 SDK_DIR=".sdk"
@@ -54,17 +57,31 @@ echo "[3/6] aapt2 link 生成未签名包与 R.java ..."
 
 echo "[4/6] 编译 Java ..."
 SRC=$(find "$APP/java" "$BUILD/gen" -name '*.java')
+compiled=0
 if command -v javac >/dev/null 2>&1; then
-    javac -nowarn -source 8 -target 8 \
+    if javac -nowarn -source 8 -target 8 \
         -bootclasspath "$ANDROID_JAR" \
         -classpath "$ANDROID_JAR" \
-        -d "$BUILD/classes" $SRC
-else
-    echo "    没有 javac，改用 ECJ 编译器"
+        -d "$BUILD/classes" $SRC 2>"$BUILD/javac.log"; then
+        compiled=1
+    else
+        echo "    javac 失败，退回 ECJ："
+        tail -n 20 "$BUILD/javac.log" || true
+        rm -rf "$BUILD/classes"
+        mkdir -p "$BUILD/classes"
+    fi
+fi
+if [ "$compiled" -eq 0 ]; then
+    echo "    使用 ECJ 编译器"
     curl -fsSL -o "$BUILD/ecj.jar" \
         "https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.33.0/ecj-3.33.0.jar"
     java -jar "$BUILD/ecj.jar" -source 8 -target 8 \
         -bootclasspath "$ANDROID_JAR" -d "$BUILD/classes" $SRC
+    chmod -R +r "$BUILD/classes" 2>/dev/null || true
+fi
+if [ -z "$(find "$BUILD/classes" -name '*.class' 2>/dev/null)" ]; then
+    echo "!! 编译没有产出 class 文件"
+    exit 1
 fi
 
 echo "[5/6] d8 生成 dex 并打包 ..."
