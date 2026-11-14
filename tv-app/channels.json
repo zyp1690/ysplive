@@ -1,0 +1,12 @@
+{
+  "updated": "2026-11-14",
+  "note": "ysplive TV 在线频道表。App 菜单「在线更新频道表」会拉这个文件；我会持续维护可用线路。",
+  "channels": [
+    {"name": "CCTV+ 1（央视官方英文频道）", "group": "央视官方", "url": "https://cd-live-stream.news.cctvplus.com/live/smil:CHANNEL1.smil/playlist.m3u8"},
+    {"name": "CCTV+ 2（央视官方英文频道）", "group": "央视官方", "url": "https://cd-live-stream.news.cctvplus.com/live/smil:CHANNEL2.smil/playlist.m3u8"},
+    {"name": "浙江广电 频道01", "group": "直连示例", "url": "https://ali-m-l.cztv.com/channels/lantian/channel01/1080p.m3u8"},
+    {"name": "浙江广电 频道02", "group": "直连示例", "url": "https://ali-m-l.cztv.com/channels/lantian/channel02/1080p.m3u8"},
+    {"name": "浙江广电 频道03", "group": "直连示例", "url": "https://ali-m-l.cztv.com/channels/lantian/channel03/1080p.m3u8"},
+    {"name": "浙江广电 频道21", "group": "直连示例", "url": "https://ali-m-l.cztv.com/channels/lantian/channel21/1080p.m3u8"}
+  ]
+}
