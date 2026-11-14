@@ -1,4 +1,4 @@
-# 最近一次 tv-apk 构建日志（run 6）
+# 最近一次 tv-apk 构建日志（run 7）
 
 ```
 java: openjdk version "25.0.5" 2026-10-20 LTS
@@ -18,5 +18,5 @@ WARNING: Restricted methods will be blocked in a future release unless native ac
 
 
 完成：/home/runner/work/ysplive/ysplive/tv-app/ysplive-tv-v1.0.0.apk  (25141 字节)
-d23c0f74d4d442c78497ca6f4ab1aec3a5bd2b4d0b24044cead37d77ca367358  ysplive-tv-v1.0.0.apk
+e5533ee964b7c5e3ff53ef1f30cd4aaca89c851cdf59450980152752a0a94989  ysplive-tv-v1.0.0.apk
 ```
