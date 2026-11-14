@@ -1,0 +1,4 @@
+.sdk/
+build/
+.keystore.jks
+*.apk
