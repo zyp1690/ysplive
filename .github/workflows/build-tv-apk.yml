@@ -109,12 +109,13 @@ jobs:
           APK=$(ls ysplive-tv-v*.apk | head -1)
           TAG="tv-v${RUN_NO}-apk"
           printf '%s\n' \
-            '安卓电视/手机客户端（Android 4.0+，API 14 起）' \
+            'ysplive TV · 安卓电视/手机端（独立版，Android 4.0+，API 14 起）' \
             '' \
-            '- 连你 NAS 上的 ysplive（默认 8767 端口），原生 MediaPlayer 播 HLS，不依赖 hls.js/MSE' \
-            '- 遥控：↑↓ 选台，←→ 上下台，OK 开/收左栏，返回收起，菜单改地址' \
-            '- 安装后先填 NAS 地址与端口' \
+            '- 不依赖 NAS：频道表、播放都在本地，原生 MediaPlayer 播 HLS，不用 hls.js/MSE' \
+            '- 遥控：↑↓ 选台，←→ 上下台，OK 开/收左栏，返回收起，菜单“管理频道”' \
+            '- 菜单里可：添加频道 / 导入 m3u 订阅 / 在线更新频道表 / 恢复内置' \
+            '- 中文央视需自备源（央视频设备签名只有服务器版能做）；内置的是官方可直连示例源' \
             '' \
-            '源码在仓库 tv-app/ 目录，构建命令：bash build.sh' > /tmp/notes.txt
+            '源码在仓库 tv-app/ 目录，构建：bash build.sh' > /tmp/notes.txt
           gh release create "$TAG" --title "ysplive TV APK ($TAG)" --notes-file /tmp/notes.txt "$APK" \
             || gh release upload "$TAG" "$APK" --clobber
