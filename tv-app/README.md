@@ -1,56 +1,51 @@
-# ysplive TV · 安卓电视端（Android 4.0+）
+# ysplive TV · 安卓电视端（Android 4.0+，独立版）
 
-ysplive 的电视/手机客户端：连你 NAS 上的 ysplive 服务（默认 `8767` 端口），把频道列表、节目单和直播画面搬到大屏。
+**不依赖 NAS** 的独立播放器：频道表、解析、播放全在这台设备上，打开就能用。
 
-- **原生播放**：走系统 `MediaPlayer`（Android 3.0 起原生支持 HLS），**不依赖 hls.js / MSE**，所以 Android 4.0（API 14）的老盒子和老手机也能播。
-- **一套包同时装手机和电视**：`LAUNCHER` + `LEANBACK_LAUNCHER` 两个入口，电视桌面能看到图标，手机装上也是同一个 App。
-- **遥控器操作**：D-pad（方向键）+ OK + 返回 + 菜单，全部支持；顺带支持 `CHANNEL_UP/DOWN`、`MEDIA_NEXT/PREVIOUS`。
-- **触屏操作**：点频道行换台，点画面收起/展开左栏。
+- **原生播放**：走系统 `MediaPlayer`（Android 3.0 起原生支持 HLS），不依赖 hls.js / MSE，Android 4.0（API 14）的老盒子也能播。
+- **一套包手机 + 电视通用**：`LAUNCHER` + `LEANBACK_LAUNCHER` 双入口。
+- **遥控器**：↑↓ 选台、←→ 上下台、OK 开/收左栏、返回收起、菜单进「管理频道」；`CHANNEL_UP/DOWN`、`MEDIA_NEXT/PREVIOUS` 同效。
+- **触屏**：点频道换台、点画面收起/展开左栏、长按频道可删除。
+- **频道自由管理**：添加单个地址（可带 Referer）、导入 m3u/m3u8 订阅、在线更新频道表、恢复内置频道、清空。
 
 ## 安装
 
 1. 下载 `ysplive-tv-v1.0.0.apk`（Release 里）
 2. 电视：`设置 → 安全 → 允许安装未知来源应用`，用 U 盘 / 当贝市场 / adb 装上
-3. 打开后先填 **NAS 地址 + 端口**（如 `192.168.1.10` / `8767`），保存即连
+3. 打开即为频道列表，选中即播
 
-手机同理，直接安装 APK 即可。
+## 频道怎么来（重要）
 
-## 遥控按键
+内置的是**可直连的官方示例源**（CCTV+ 1/2 与浙江广电几条官方 CDN 线路）。中文央视 CCTV-1…17 的官方直播走「央视频」App 的设备签名协议，需要服务器侧做握手，**独立 App 里没有可靠直连办法**——那正是 NAS 版 `ysplive` 在做的事。
 
-| 按键 | 作用 |
-| --- | --- |
-| ↑ / ↓ | 切换频道（选中即换台） |
-| ← / → | 上一台 / 下一台（CHANNEL_UP/DOWN、MEDIA_NEXT/PREVIOUS 同效） |
-| OK / 确定 | 左栏收起时展开；展开时选中行即播放并收起 |
-| 返回 | 收起左栏；再按退出 |
-| 菜单 | 打开「连接 NAS」设置，可改地址端口 |
+所以在独立版里，中文频道靠这两条路：
 
-## 它依赖 NAS 上什么
+- 菜单 → **导入 m3u / m3u8 订阅**：粘贴你手上的 IPTV 列表地址，自动解析追加；
+- 菜单 → **添加频道**：填名称 + `http(s)://…/xxx.m3u8`，部分源要 Referer 时一并填上。
 
-- `http://NAS:8767/api/state` —— 频道列表 + 节目单（ysplive 的网页服务已自带）
-- `http://NAS:8767/<slug>.m3u8` —— 主线路；失败自动回退 `http://NAS:8767/api/play.m3u8?ch=<slug>&proxy=1`
-- 也就是说：**NAS 上装好 ysplive 并启动**，客户端才有的可连；客户端本身不带频道与代理。
+频道表会存在应用私有目录的 `channels.json`，重装会清空；菜单里的「在线更新频道表」会从
+`https://raw.githubusercontent.com/zyp1690/ysplive/main/tv-app/channels.json` 拉最新列表，
+这条链接我后续会持续维护可用线路，所以换源不用重装。
 
 ## 构建
 
-不需要 Android Studio / Gradle，一条命令：
+不需要 Android Studio / Gradle：
 
 ```bash
-./build.sh
-# 产物：ysplive-tv-v1.0.0.apk
+./build.sh          # 产物：ysplive-tv-v1.0.0.apk
 ```
 
-脚本会自己下载 Android build-tools 33.0.2 与 platform-32（约 120MB，落在 `.sdk/`），流程为
+脚本会自己下 Android build-tools 33.0.2 与 platform-32 到 `.sdk/`，流程
 `aapt2 compile → aapt2 link → javac/ECJ → d8 → zipalign → apksigner`。
 
-签名：脚本首次运行会生成 `.keystore.jks`（密码 `ysplive`）。**每个构建机生成的签名不同**，所以换机器构建的新版本要覆盖安装时，需要先卸载旧包；如果要长期「可覆盖升级」的固定签名，需要把同一份 keystore 固化下来（可以让 CI 从仓库 secret 读）。
+签名：首次运行生成 `.keystore.jks`（密码 `ysplive`）。**每个构建机签名不同**，换机器构建的包覆盖升级要先卸载旧包。
 
 ## 已知限制
 
-- 界面是自绘的简洁版（左侧频道栏 + 底部信息条），没有照搬网页版的三栏浮层；网页版的完整界面仍在 `http://NAS:8767`。
-- 节目单来自 NAS 的 EPG 缓存，NAS 上 EPG 还没拉到时只显示频道名。
-- 部分频道线路只做 TLS/特殊 HEAD 处理，客户端若播放失败会提示改用网页版。
-- Android 4.0 的 `MediaPlayer` 对 HLS 支持有限（TS 分片可用，fMP4 不支持）。
+- 内置示例源不是中文央视；央视中文频道需自备源（见上）。
+- 界面是自绘简洁版（左频道栏 + 底部信息条），没有 EPG 节目单。
+- Android 4.0 的 `MediaPlayer` 只支持 TS 分片 HLS，遇到 fMP4 的源播不了。
+- 部分 IPTV 源会挑 UA，App 已做「默认 UA → 备用 UA」两次尝试，仍失败会在屏幕上提示。
 
 ## 版权
 

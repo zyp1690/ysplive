@@ -47,6 +47,7 @@ echo "[3/6] aapt2 link 生成未签名包与 R.java ..."
     -o "$BUILD/base.apk" \
     -I "$ANDROID_JAR" \
     --manifest "$APP/AndroidManifest.xml" \
+    -A "$APP/assets" \
     -R "$BUILD/res.zip" \
     --java "$BUILD/gen" \
     --auto-add-overlay \

@@ -1,6 +1,6 @@
 {
   "updated": "2026-11-14",
-  "note": "ysplive TV 在线频道表。App 菜单「在线更新频道表」会拉这个文件；我会持续维护可用线路。",
+  "note": "内置直连示例频道（官方 CDN）。中文央视频道需要你自己导入 m3u 订阅，或在菜单里逐个添加地址。",
   "channels": [
     {"name": "CCTV+ 1（央视官方英文频道）", "group": "央视官方", "url": "https://cd-live-stream.news.cctvplus.com/live/smil:CHANNEL1.smil/playlist.m3u8"},
     {"name": "CCTV+ 2（央视官方英文频道）", "group": "央视官方", "url": "https://cd-live-stream.news.cctvplus.com/live/smil:CHANNEL2.smil/playlist.m3u8"},
