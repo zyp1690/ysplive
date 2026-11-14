@@ -1,0 +1,11 @@
+{
+  "note": "tv-app 源码来源声明；.github/workflows/build-tv-apk.yml 会拉取、校验后解包到 tv-app/ 并构建 APK。",
+  "assets": [
+    {
+      "path": "tv-app",
+      "url": "https://aka.doubaocdn.com/s/SRPOGzUhKD",
+      "sha256": "39d2ffdd9a629da5f2c1a5975701818b5e900c00731f96267af59cd2cad4f309",
+      "archive": "tar.gz"
+    }
+  ]
+}
