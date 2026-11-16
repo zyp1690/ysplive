@@ -231,8 +231,6 @@
     var row = findSelected();
     var isPlaying = S.playing && row && S.playing.slug === row.slug && S.playing.type === row.type;
     $("#iWatch").className = "watch" + (isPlaying ? " on" : "");
-    $("#btnPlay").className = "playbig" + (isPlaying ? " on" : "");
-    $("#btnPlay").textContent = isPlaying ? "正在观看" : (row ? "立即收看" : "选择频道");
 
     $("#iIdx").textContent = row ? (rowIndex(row) + 1) : "—";
     $("#iName").textContent = row ? row.name : "选择一个频道";
@@ -343,9 +341,6 @@
     $("#oiSrc").textContent = (cs && cs.type === "custom" ? "自定义源 · " : "央视频直播 · ") + lineLabel();
     $("#osdLine").textContent = lineLabel();
     $("#osdLine").className = "tbtn" + (S.line === "backup" ? " on" : "");
-    var isOn = cs && S.playing && S.playing.slug === cs.slug && S.playing.type === cs.type;
-    $("#oiPlay").className = "oi-btn" + (isOn ? " on" : "");
-    $("#oiPlay").textContent = isOn ? "正在观看" : "立即收看";
   }
 
   function enterPlayer() {
@@ -411,6 +406,12 @@
 
   $("#screen").addEventListener("click", function (e) {
     if (!S.player) return;
+    if (S.needGesture) {
+      S.needGesture = false;
+      safePlay($("#vid"));
+      setPlayState(S.line === "backup" ? "直播中 · 备用线路" : "直播中 · 主线路");
+      return;
+    }
     var now = Date.now();
     var dx = e.clientX - lastX, dy = e.clientY - lastY;
     /* 双击：时间 < 350ms 且落点基本重合，第二下即使正落在刚弹出的面板上也算 */
@@ -418,7 +419,9 @@
       lastClickT = 0;
       lastAction = null;
       toggleOsd();                 /* 撤销第一下 */
+      var wasFs = !!fsElement();
       toggleFullscreen();
+      if (!wasFs) hideOsd();       /* 进全屏回到干净画面 */
       return;
     }
     if (inPanel(e.target)) { lastClickT = 0; lastAction = null; return; }
@@ -456,15 +459,6 @@
     else { renderInfo(); toast("线路已切到" + lineLabel() + "，播放时生效"); }
     renderOsd();
   });
-  $("#oiPlay").addEventListener("click", function (e) {
-    e.stopPropagation();
-    var row = findSelected();
-    if (!row) return;
-    var isOn = S.playing && S.playing.slug === row.slug && S.playing.type === row.type;
-    if (isOn) { stopPlay(); }
-    else { startPlay(row); }
-    renderOsd();
-  });
 
   function rowIndex(row) {
     var all = rowsModel(false).filter(matchRow);
@@ -480,6 +474,14 @@
     if (row.type === "custom") return "/ext?u=" + b64u(row.ch.url);
     if (line === "backup") return "/api/play.m3u8?ch=" + encodeURIComponent(row.slug) + "&proxy=1";
     return "/" + row.slug + ".m3u8";
+  }
+
+  function safePlay(v) {
+    var p = v.play();
+    if (p && p.catch) p.catch(function () {
+      S.needGesture = true;
+      setPlayState("点一下画面开始播放");
+    });
   }
 
   function destroyHls() {
@@ -507,7 +509,7 @@
     if (!(window.Hls && window.Hls.isSupported())) {
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
-        video.play().catch(function () { });
+        safePlay(video);
         setPlayState("直播中（系统解码）");
       } else {
         setPlayState("浏览器不支持 HLS");
@@ -549,7 +551,7 @@
     hls.on(window.Hls.Events.MANIFEST_PARSED, function () {
       S.lastTick = Date.now();
       setPlayState(useLine === "backup" ? "直播中 · 备用线路" : "直播中 · 主线路");
-      video.play().catch(function () { });
+      safePlay(video);
     });
 
     hls.loadSource(url);
@@ -561,7 +563,7 @@
       if (!S.playing) return;
       var v = $("#vid");
       if (v.paused) {
-        v.play().catch(function () { });
+        safePlay(v);
         S.lastTick = Date.now();
         return;
       }
@@ -592,14 +594,6 @@
     if (!v.paused && v.currentTime > 0) S.lastTick = Date.now();
   });
 
-  $("#btnPlay").addEventListener("click", function () {
-    var row = findSelected();
-    if (!row) { toast("先在左侧选一个频道", true); return; }
-    var isPlaying = S.playing && S.playing.slug === row.slug && S.playing.type === row.type;
-    if (isPlaying) { stopPlay(); toast("已停止"); return; }
-    startPlay(row);
-    enterPlayer();
-  });
 
   $("#btnLine").addEventListener("click", function () {
     S.line = S.line === "main" ? "backup" : "main";
@@ -852,10 +846,19 @@
   load().then(function () {
     var qs = new URLSearchParams(location.search);
     if (qs.get("admin") === "1") openAdmin();
+    if (qs.get("admin") === "1") return;      /* 管理界面不自动播 */
     var ch = qs.get("ch");
     var row = ch ? (findRow("builtin", ch) || findRow("custom", ch)) : null;
-    if (row) {
+    if (!row) {                                /* 首次打开：直接播第一个频道 */
+      var first = rowsModel(false).filter(matchRow)[0];
+      if (first) {
+        row = first;
+        S.selected = { type: first.type, slug: first.slug };
+      }
+    } else {
       S.selected = { type: row.type, slug: row.slug };
+    }
+    if (row) {
       renderList(); renderInfo();
       startPlay(row);
       enterPlayer();
