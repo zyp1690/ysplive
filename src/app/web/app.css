@@ -319,8 +319,10 @@ table.grid tr:last-child td{border-bottom:0}
   padding:26px 30px 46px;gap:0;align-items:stretch;
   background:linear-gradient(90deg,rgba(3,9,15,.92) 0%,rgba(3,9,15,.78) 42%,rgba(3,9,15,.3) 70%,rgba(3,9,15,.1) 100%);
   animation:osdIn .16s ease-out;
+  pointer-events:none;   /* 遮罩不吃点击：点画面空白 = 点在视频上，能立刻收起浮层 */
 }
 .osd.on{display:flex}
+.osd-col,.osd-tools{pointer-events:auto}
 .screenbar{transition:opacity .2s ease}
 .osd-on .screenbar{opacity:0;pointer-events:none}
 @keyframes osdIn{from{opacity:.2}to{opacity:1}}

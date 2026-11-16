@@ -324,9 +324,9 @@
         S.selected = { type: row.type, slug: row.slug };
         startPlay(row);
         renderOsd();
-        $("#osd").classList.add("collapsed");     /* 换台后自动收起频道栏 */
+        $("#osd").classList.remove("collapsed");  /* 换台后保留频道栏 */
         clearTimeout(S.osdTimer);
-        S.osdTimer = setTimeout(hideOsd, 6000);
+        S.osdTimer = setTimeout(hideOsd, 9000);
       });
     });
 
@@ -361,7 +361,6 @@
   function exitPlayer() {
     S.player = false;
     $("#shell").classList.remove("player");
-    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
     hideOsd();
     if (fsElement()) {
       exitFs();
@@ -399,31 +398,41 @@
     if (fsElement()) exitFs(); else requestFs();
   }
 
-  /* 单击 = 频道浮层显示/隐藏；双击 = 全屏切换。
-     单击会等 260ms 看有没有第二下，避免和双击打架。 */
-  var clickTimer = null;
+  /* 单击 = 立刻执行（显示/隐藏频道浮层）；双击 = 全屏切换。
+     不延时：第一下就动作，第二下在 340ms 内到 → 判为双击，
+     先把第一下的浮层切换原样撤销，再切全屏，视觉上不闪。
+     浮层遮罩 pointer-events:none，点到面板才算浮层内点击，
+     所以「单击播放画面」能立刻收起浮层。 */
+  var lastClickT = 0, lastAction = null, lastX = 0, lastY = 0;
+
+  function inPanel(el) {
+    return !!(el.closest(".osd-col") || el.closest(".osd-tools") || el.closest("button"));
+  }
 
   $("#screen").addEventListener("click", function (e) {
     if (!S.player) return;
-    if (e.target.closest("button")) return;
-    if (e.target.closest(".osd-col")) return;      /* 点在浮层卡片上：不处理 */
-    if (clickTimer) {
-      clearTimeout(clickTimer);
-      clickTimer = null;
+    var now = Date.now();
+    var dx = e.clientX - lastX, dy = e.clientY - lastY;
+    /* 双击：时间 < 350ms 且落点基本重合，第二下即使正落在刚弹出的面板上也算 */
+    if (lastAction === "osd" && now - lastClickT < 350 && dx * dx + dy * dy < 2500) {
+      lastClickT = 0;
+      lastAction = null;
+      toggleOsd();                 /* 撤销第一下 */
       toggleFullscreen();
       return;
     }
-    clickTimer = setTimeout(function () {
-      clickTimer = null;
-      toggleOsd();
-    }, 260);
+    if (inPanel(e.target)) { lastClickT = 0; lastAction = null; return; }
+    lastClickT = now;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    lastAction = "osd";
+    toggleOsd();
   });
 
   /* 双击事件本身用来吃掉浏览器默认行为（部分电视浏览器会放大页面） */
   $("#screen").addEventListener("dblclick", function (e) {
     if (!S.player) return;
-    if (e.target.closest("button")) return;
-    if (e.target.closest(".osd-col")) return;
+    if (inPanel(e.target)) return;
     e.preventDefault();
   });
 
