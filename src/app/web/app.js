@@ -361,18 +361,70 @@
   function exitPlayer() {
     S.player = false;
     $("#shell").classList.remove("player");
+    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
     hideOsd();
-    if (document.fullscreenElement && document.exitFullscreen) {
-      try { document.exitFullscreen(); } catch (e) { }
+    if (fsElement()) {
+      exitFs();
     }
   }
+
+  /* ------------------------------------------------ 全屏切换（双击画面） */
+
+  function fsElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function requestFs() {
+    var el = $("#screen");
+    var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (fn) {
+      try {
+        var r = fn.call(el, { navigationUI: "hide" });
+        if (r && r.catch) r.catch(function () { });
+      } catch (e) { }
+    }
+  }
+
+  function exitFs() {
+    var fn = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if (fn) {
+      try {
+        var r = fn.call(document);
+        if (r && r.catch) r.catch(function () { });
+      } catch (e) { }
+    }
+  }
+
+  function toggleFullscreen() {
+    if (fsElement()) exitFs(); else requestFs();
+  }
+
+  /* 单击 = 频道浮层显示/隐藏；双击 = 全屏切换。
+     单击会等 260ms 看有没有第二下，避免和双击打架。 */
+  var clickTimer = null;
 
   $("#screen").addEventListener("click", function (e) {
     if (!S.player) return;
     if (e.target.closest("button")) return;
     if (e.target.closest(".osd-col")) return;      /* 点在浮层卡片上：不处理 */
-    if ($("#osd").classList.contains("on")) { hideOsd(); return; }
-    showOsd();
+    if (clickTimer) {
+      clearTimeout(clickTimer);
+      clickTimer = null;
+      toggleFullscreen();
+      return;
+    }
+    clickTimer = setTimeout(function () {
+      clickTimer = null;
+      toggleOsd();
+    }, 260);
+  });
+
+  /* 双击事件本身用来吃掉浏览器默认行为（部分电视浏览器会放大页面） */
+  $("#screen").addEventListener("dblclick", function (e) {
+    if (!S.player) return;
+    if (e.target.closest("button")) return;
+    if (e.target.closest(".osd-col")) return;
+    e.preventDefault();
   });
 
   $("#osdFold").addEventListener("click", function (e) { e.stopPropagation(); exitPlayer(); });
@@ -384,9 +436,7 @@
   });
   $("#osdFull").addEventListener("click", function (e) {
     e.stopPropagation();
-    var el = $("#screen");
-    if (document.fullscreenElement) { document.exitFullscreen(); return; }
-    if (el.requestFullscreen) el.requestFullscreen({ navigationUI: "hide" });
+    toggleFullscreen();
   });
   $("#osdLine").addEventListener("click", function (e) {
     e.stopPropagation();
@@ -777,9 +827,7 @@
 
   $("#btnFull").addEventListener("click", function () {
     if (!S.player) { enterPlayer(); return; }
-    var el = $("#screen");
-    if (document.fullscreenElement) { document.exitFullscreen(); return; }
-    if (el.requestFullscreen) el.requestFullscreen({ navigationUI: "hide" });
+    toggleFullscreen();
   });
 
   document.addEventListener("keydown", function (e) {
