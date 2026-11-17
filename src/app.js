@@ -476,6 +476,26 @@
     return "/" + row.slug + ".m3u8";
   }
 
+  /* 老页面可能没有 #tapStart，缺了就现场补一个，避免空引用 */
+  function tapEl() {
+    var el = $("#tapStart");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "tapStart";
+      el.className = "tapstart";
+      el.textContent = "点击画面开始播放";
+      var scr = $("#screen");
+      if (scr) scr.appendChild(el);
+      el.addEventListener("click", function (e) { e.stopPropagation(); resumePlay(); });
+    }
+    return el;
+  }
+  function tapOn(on) {
+    var el = tapEl();
+    if (!el) return;
+    if (on) el.classList.add("on"); else el.classList.remove("on");
+  }
+
   function safePlay(v) {
     if (!v) return;
     var p = v.play();
@@ -491,7 +511,7 @@
       }).catch(function () {
         S.needGesture = true;
         setPlayState("点一下画面开始播放");
-        $("#tapStart").classList.add("on");
+        tapOn(true);
       });
     });
   }
@@ -500,7 +520,7 @@
     var v = $("#vid");
     S.needGesture = false;
     S.mutedAuto = false;
-    $("#tapStart").classList.remove("on");
+    tapOn(false);
     v.muted = false;
     safePlay(v);
     setPlayState(S.line === "backup" ? "直播中 · 备用线路" : "直播中 · 主线路");
@@ -525,7 +545,7 @@
     S.playing = { type: row.type, slug: row.slug, name: row.name };
     S.switched = useLine === "backup";
     $("#idle").classList.add("hide");
-    $("#tapStart").classList.remove("on");
+    tapOn(false);
     video.muted = false;
     setPlayState("加载中…");
     renderInfo(); renderList();
@@ -593,7 +613,7 @@
         return;
       }
       if (v.readyState === 0 && Date.now() - (S.stallFrom || 0) > 6000) {
-        $("#tapStart").classList.add("on");
+        tapOn(true);
         return;
       }
       if (Date.now() - S.lastTick < 20000) return;
@@ -614,15 +634,10 @@
     S.line = "main";
     S.switched = false;
     $("#idle").classList.remove("hide");
-    $("#tapStart").classList.remove("on");
+    tapOn(false);
     setPlayState("未播放");
     renderInfo(); renderList();
   }
-
-  $("#tapStart").addEventListener("click", function (e) {
-    e.stopPropagation();
-    resumePlay();
-  });
 
   /* 任何一次按下/按键都先把卡住的播放推起来（不依赖点到视频本体） */
   document.addEventListener("pointerdown", function () {
@@ -641,12 +656,12 @@
   });
 
   $("#vid").addEventListener("playing", function () {
-    $("#tapStart").classList.remove("on");
+    tapOn(false);
     S.needGesture = false;
   });
 
   $("#vid").addEventListener("pause", function () {
-    if (S.player && S.playing) $("#tapStart").classList.add("on");
+    if (S.player && S.playing) tapOn(true);
   });
 
   $("#vid").addEventListener("timeupdate", function () {
