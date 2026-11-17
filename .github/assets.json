@@ -3,8 +3,8 @@
   "assets": [
     {
       "path": "ysplive/fpk/ysplive-1.1.9-fnos-all.fpk",
-      "url": "https://aka.doubaocdn.com/s/yZzEVxnXUI",
-      "sha256": "4ee9ceea29c708f46719aff571602c6d9a2e586c0851545fcf600f37dc9781fa"
+      "url": "https://aka.doubaocdn.com/s/RgVsOavbeP",
+      "sha256": "5ff94ecbff76997d1631f9fd27eff8339bb7ae0cab968edaef027af216792d58"
     },
     {
       "path": "ysplive/ICON.PNG",
@@ -23,8 +23,8 @@
     },
     {
       "path": "src",
-      "url": "https://aka.doubaocdn.com/s/2EECJ5UScQ",
-      "sha256": "dca98bb719480459699da7b17a651e543738d6fffa8daca258d7217c12c1de91",
+      "url": "https://aka.doubaocdn.com/s/mqtQro9fux",
+      "sha256": "7d85c1c0be4338daebf2bddddf53dcef15cbda2e63c44afcfc73360377ed3713",
       "archive": "tar.gz",
       "strip_components": 1
     }
