@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#08111c">
 <title>央视频直播</title>
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/app.css?v=119">
 </head>
 <body>
 <div class="shell" id="shell">
@@ -71,7 +71,8 @@
     </section>
 
     <section class="screen" id="screen">
-      <video id="vid" playsinline></video>
+      <video id="vid" playsinline muted></video>
+      <div class="tapstart" id="tapStart">点击画面开始播放</div>
       <div class="idle" id="idle">
         <div class="idle-mark">ysplive</div>
         <div class="idle-ch" id="idleCh">央视频直播</div>
@@ -196,7 +197,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="/static/hls.js"></script>
-<script src="/static/app.js"></script>
+<script src="/static/hls.js?v=119"></script>
+<script src="/static/app.js?v=119"></script>
 </body>
 </html>

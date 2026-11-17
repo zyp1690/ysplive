@@ -406,10 +406,10 @@
 
   $("#screen").addEventListener("click", function (e) {
     if (!S.player) return;
-    if (S.needGesture) {
-      S.needGesture = false;
-      safePlay($("#vid"));
-      setPlayState(S.line === "backup" ? "直播中 · 备用线路" : "直播中 · 主线路");
+    var v = $("#vid");
+    if (S.suppressClick) { S.suppressClick = false; return; }
+    if (S.needGesture || (S.playing && v.paused)) {
+      resumePlay();
       return;
     }
     var now = Date.now();
@@ -477,11 +477,33 @@
   }
 
   function safePlay(v) {
+    if (!v) return;
     var p = v.play();
-    if (p && p.catch) p.catch(function () {
-      S.needGesture = true;
-      setPlayState("点一下画面开始播放");
+    if (!p || !p.catch) return;
+    p.catch(function () {
+      /* 带声音的自动播放被拦：先静音播起来，用户一点再开声音 */
+      v.muted = true;
+      var p2 = v.play();
+      if (!p2 || !p2.then) { S.mutedAuto = true; return; }
+      p2.then(function () {
+        S.mutedAuto = true;
+        setPlayState("已静音播放 · 点画面开声音");
+      }).catch(function () {
+        S.needGesture = true;
+        setPlayState("点一下画面开始播放");
+        $("#tapStart").classList.add("on");
+      });
     });
+  }
+
+  function resumePlay() {
+    var v = $("#vid");
+    S.needGesture = false;
+    S.mutedAuto = false;
+    $("#tapStart").classList.remove("on");
+    v.muted = false;
+    safePlay(v);
+    setPlayState(S.line === "backup" ? "直播中 · 备用线路" : "直播中 · 主线路");
   }
 
   function destroyHls() {
@@ -503,6 +525,8 @@
     S.playing = { type: row.type, slug: row.slug, name: row.name };
     S.switched = useLine === "backup";
     $("#idle").classList.add("hide");
+    $("#tapStart").classList.remove("on");
+    video.muted = false;
     setPlayState("加载中…");
     renderInfo(); renderList();
 
@@ -559,12 +583,17 @@
 
     /* 20 秒无画面自动切备用线路 */
     clearInterval(S.timer);
+    S.stallFrom = Date.now();
     S.timer = setInterval(function () {
       if (!S.playing) return;
       var v = $("#vid");
       if (v.paused) {
         safePlay(v);
         S.lastTick = Date.now();
+        return;
+      }
+      if (v.readyState === 0 && Date.now() - (S.stallFrom || 0) > 6000) {
+        $("#tapStart").classList.add("on");
         return;
       }
       if (Date.now() - S.lastTick < 20000) return;
@@ -585,9 +614,40 @@
     S.line = "main";
     S.switched = false;
     $("#idle").classList.remove("hide");
+    $("#tapStart").classList.remove("on");
     setPlayState("未播放");
     renderInfo(); renderList();
   }
+
+  $("#tapStart").addEventListener("click", function (e) {
+    e.stopPropagation();
+    resumePlay();
+  });
+
+  /* 任何一次按下/按键都先把卡住的播放推起来（不依赖点到视频本体） */
+  document.addEventListener("pointerdown", function () {
+    if (!S.playing) return;
+    var v = $("#vid");
+    if (v.paused) {
+      S.suppressClick = true;
+      resumePlay();
+    }
+  }, true);
+
+  document.addEventListener("keydown", function () {
+    if (!S.playing) return;
+    var v = $("#vid");
+    if (v.paused) resumePlay();
+  });
+
+  $("#vid").addEventListener("playing", function () {
+    $("#tapStart").classList.remove("on");
+    S.needGesture = false;
+  });
+
+  $("#vid").addEventListener("pause", function () {
+    if (S.player && S.playing) $("#tapStart").classList.add("on");
+  });
 
   $("#vid").addEventListener("timeupdate", function () {
     var v = $("#vid");

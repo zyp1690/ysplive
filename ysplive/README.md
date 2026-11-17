@@ -6,13 +6,13 @@
 
 | 文件 | 说明 |
 | --- | --- |
-| `ysplive-1.1.8-fnos-all.fpk` | 安装包，x86 与 ARM 通用（纯 Python 文本文件 + 网页资源，无架构二进制） |
-| `ysplive-1.1.8-fnos-all.fpk.sha256` | 校验和 |
+| `ysplive-1.1.9-fnos-all.fpk` | 安装包，x86 与 ARM 通用（纯 Python 文本文件 + 网页资源，无架构二进制） |
+| `ysplive-1.1.9-fnos-all.fpk.sha256` | 校验和 |
 | `build-fpk.sh` | 本地一键重建脚本（自动按 manifest 的 appname/version 命名产物） |
 
 ## 安装
 
-1. 飞牛 fnOS → **应用中心** → 右下角 **手动安装** → 选择 `ysplive-1.1.8-fnos-all.fpk`；
+1. 飞牛 fnOS → **应用中心** → 右下角 **手动安装** → 选择 `ysplive-1.1.9-fnos-all.fpk`；
 2. 安装向导里确认**服务端口**（默认 `8767`）与播放参数；
 3. 装完桌面出现「ysplive 央视频直播」图标，点开即进入管理界面；应用中心里可启动 / 停止 / 修改配置。
 
@@ -23,7 +23,7 @@
 命令行安装 / 卸载：
 
 ```bash
-sudo appcenter-cli install-fpk /vol1/1000/ysplive-1.1.8-fnos-all.fpk
+sudo appcenter-cli install-fpk /vol1/1000/ysplive-1.1.9-fnos-all.fpk
 sudo appcenter-cli status --appname ysplive
 sudo appcenter-cli uninstall ysplive
 ```
@@ -48,7 +48,7 @@ sudo appcenter-cli uninstall ysplive
 
 | 操作 | 效果 |
 | --- | --- |
-| 打开页面 | **自动开始播放**第一个频道，直接进入播放视图：隐藏顶栏与页脚，画面铺满窗口（浏览器拦截自动播放时，点一下画面即开始，状态栏会提示） |
+| 打开页面 | **自动开始播放**第一个频道，直接进入播放视图：隐藏顶栏与页脚，画面铺满窗口（被浏览器拦截自动播放时会先静音播起来，画面中央出现「点击画面开始播放」，点一下即带声音播放） |
 | 播放中单击画面 | 弹出半透明选台浮层：左侧频道列表、中间频道信息（正在观看标记），两块面板合成一张卡片（无缝隙）；右上「主线路 / 管理 / 全屏 / 收起」 |
 | 浮层里点一行 | **立刻**换到该频道，浮层与频道栏都保留，可继续挑台（不再自动收起列表） |
 | 再单击画面 | 立刻收起浮层继续看；9 秒无操作也会自动收起 |
