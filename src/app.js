@@ -521,6 +521,16 @@
     S.needGesture = false;
     S.mutedAuto = false;
     tapOn(false);
+    /* 一条数据都没拿到：直接从主线路重开当前频道，而不是干等 */
+    if (S.playing && v.readyState === 0) {
+      var cur = findRow(S.playing.type, S.playing.slug);
+      if (cur) {
+        S.switched = false;
+        S.line = "main";
+        startPlay(cur, "main");
+        return;
+      }
+    }
     v.muted = false;
     safePlay(v);
     setPlayState(S.line === "backup" ? "直播中 · 备用线路" : "直播中 · 主线路");
@@ -563,10 +573,17 @@
     }
 
     var hls = new window.Hls({
-      maxBufferLength: 22,
-      maxMaxBufferLength: 44,
+      maxBufferLength: 20,
+      maxMaxBufferLength: 40,
       liveSyncDurationCount: 3,
-      enableWorker: true
+      lowLatencyMode: false,
+      enableWorker: true,
+      manifestLoadingTimeOut: 12000,
+      manifestLoadingMaxRetry: 3,
+      levelLoadingTimeOut: 12000,
+      levelLoadingMaxRetry: 5,
+      fragLoadingTimeOut: 26000,
+      fragLoadingMaxRetry: 6
     });
     S.hls = hls;
     var mediaRetry = 0;
@@ -616,14 +633,20 @@
         tapOn(true);
         return;
       }
-      if (Date.now() - S.lastTick < 20000) return;
-      if (S.line !== "main" || S.switched) return;
+      var wait = v.readyState === 0 ? 9000 : 16000;
+      if (Date.now() - S.lastTick < wait) return;
       var cur = findRow(S.playing.type, S.playing.slug);
       if (!cur || cur.type === "custom") return;
-      S.switched = true;
-      S.line = "backup";
-      toast("20 秒无画面，自动切换备用线路");
-      startPlay(cur, "backup");
+      if (S.line === "main") {
+        S.switched = true;
+        S.line = "backup";
+        toast("主线路取不到画面，切备用线路");
+        startPlay(cur, "backup");
+        return;
+      }
+      /* 两条线路都拿不到数据：给出明确出口，点一下重试 */
+      setPlayState("两条线路都取不到数据 · 点画面重试");
+      tapOn(true);
     }, 2000);
   }
 

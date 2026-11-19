@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ysplive 自检</title>
+<style>
+  :root{--bg:#08111C;--card:#0E1B2A;--line:rgba(255,255,255,.08);--gold:#F3C14C;--ok:#22C3A6;--bad:#FF6B6B;--text:#E8EEF6;--dim:#8BA0B8}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;padding:20px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+  .row{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.06)}
+  .row:last-child{border-bottom:0}
+  .k{min-width:150px;color:var(--dim)}
+  .v{flex:1;word-break:break-all}
+  .tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:700}
+  .tag.ok{background:rgba(34,195,166,.15);color:var(--ok);border:1px solid rgba(34,195,166,.4)}
+  .tag.bad{background:rgba(255,107,107,.14);color:var(--bad);border:1px solid rgba(255,107,107,.4)}
+  .tag.wait{background:rgba(243,193,76,.13);color:var(--gold);border:1px solid rgba(243,193,76,.4)}
+  pre{white-space:pre-wrap;font:12px/1.55 ui-monospace,Menlo,Consolas,monospace;color:#B9C7D6;margin:0}
+  button{background:var(--gold);border:0;color:#1A1200;font-weight:700;padding:8px 16px;border-radius:9px;cursor:pointer}
+  .verdict{font-size:14px;line-height:1.7}
+</style>
+<h1>ysplive 播放自检</h1>
+<div class="sub">逐跳检查：引擎 → 节目单 → 分片（NAS 侧 / 本机侧）。把这一页截图发给我即可定位。</div>
+
+<script src="/static/hls.js?v=1110"></script>
+
+<div class="card" id="verdictCard"><b>结论：</b><div class="verdict" id="verdict">检测中…</div></div>
+
+<div class="card">
+  <div class="row"><span class="k">引擎 /api/state</span><span class="v" id="engine">检测中…</span></div>
+  <div class="row"><span class="k">节目单 /cctv1.m3u8</span><span class="v" id="manifest">检测中…</span></div>
+  <div class="row"><span class="k">分片（NAS 代理取）</span><span class="v" id="p1">检测中…</span></div>
+  <div class="row"><span class="k">分片（本机直连央视）</span><span class="v" id="p2">检测中…</span></div>
+  <div class="row"><span class="k">HLS 运行库</span><span class="v" id="hls">检测中…</span></div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <b>引擎诊断原文（/api/diag）</b><button onclick="run()">重新检测</button>
+  </div>
+  <pre id="diag">读取中…</pre>
+</div>
+
+<script>
+var R = {};
+function set(id, txt, cls) {
+  var el = document.getElementById(id);
+  el.innerHTML = txt + (cls ? ' <span class="tag ' + cls + '">' + ({ok:"通",bad:"断",wait:"慢"}[cls] || '') + '</span>' : '');
+}
+function ms(t){ return Math.round(t) + ' ms'; }
+
+function probeFrag(url, label, id) {
+  /* 分片是无限流，不能等 arrayBuffer()：读满 256KB 或 15 秒就下结论 */
+  var t0 = performance.now(), bytes = 0, code = 0;
+  set(id, '请求中…', 'wait');
+  return new Promise(function (resolve) {
+    var done = false;
+    var timer = setTimeout(function () {
+      if (done) return; done = true;
+      R[label] = {ok: bytes > 1000, bytes: bytes, code: code, ms: performance.now() - t0, partial: true};
+      set(id, (code ? 'HTTP ' + code : '连接中') + ' · 15 秒读到 ' + bytes + ' 字节', bytes > 1000 ? 'ok' : 'bad');
+      resolve();
+    }, 15000);
+    fetch(url, {cache: 'no-store'}).then(function (res) {
+      code = res.status;
+      if (!res.ok) {
+        if (done) return; done = true; clearTimeout(timer);
+        R[label] = {ok: false, code: code, bytes: 0, ms: performance.now() - t0};
+        set(id, 'HTTP ' + code + ' · 被拒绝', 'bad'); resolve(); return;
+      }
+      var reader = res.body.getReader();
+      (function pump() {
+        reader.read().then(function (chunk) {
+          if (done) return;
+          if (chunk.done || bytes >= 262144) {
+            done = true; clearTimeout(timer);
+            R[label] = {ok: bytes > 1000, code: code, bytes: bytes, ms: performance.now() - t0};
+            set(id, 'HTTP ' + code + ' · ' + bytes + ' 字节 · ' + ms(performance.now() - t0), bytes > 1000 ? 'ok' : 'bad');
+            try { reader.cancel(); } catch (e) { }
+            verdict(); resolve(); return;
+          }
+          bytes += chunk.value ? chunk.value.length : 0;
+          pump();
+        }).catch(function (e) {
+          if (done) return; done = true; clearTimeout(timer);
+          R[label] = {ok: bytes > 1000, bytes: bytes, code: code, err: e.message, ms: performance.now() - t0};
+          set(id, '中断 · ' + e.message + ' · 已读 ' + bytes + ' 字节', bytes > 1000 ? 'ok' : 'bad');
+          verdict(); resolve();
+        });
+      })();
+    }).catch(function (e) {
+      if (done) return; done = true; clearTimeout(timer);
+      R[label] = {ok: false, err: e.name + ': ' + e.message, ms: performance.now() - t0};
+      set(id, '失败 · ' + e.name + ' · ' + ms(performance.now() - t0), 'bad');
+      verdict(); resolve();
+    });
+  });
+}
+
+function timeoutFetch(url, msLimit) {
+  return new Promise(function (resolve, reject) {
+    var done = false, t0 = performance.now();
+    var timer = setTimeout(function () {
+      if (done) return; done = true;
+      reject(new Error('超时 ' + msLimit + 'ms'));
+    }, msLimit);
+    fetch(url, {cache:'no-store'}).then(function (res) {
+      if (done) return;
+      done = true; clearTimeout(timer);
+      resolve({res: res, t0: t0});
+    }).catch(function (e) { if (done) return; done = true; clearTimeout(timer); reject(e); });
+  });
+}
+
+function run() {
+  R = {};
+  set('verdict', '检测中…');
+  /* 1. 引擎 */
+  timeoutFetch('/api/state', 12000).then(function (r) {
+    return r.res.json().then(function (j) {
+      R.engine = {ok: true, engine: j.engine && j.engine.ok, ch: (j.builtin || []).length + (j.custom || []).length};
+      set('engine', '引擎 ' + (j.engine && j.engine.ok ? '正常' : '异常') + ' · 内置 ' + (j.builtin || []).length + ' 路 · ' + ms(performance.now() - r.t0), j.engine && j.engine.ok ? 'ok' : 'bad');
+    });
+  }).catch(function (e) { set('engine', '失败 · ' + e.message, 'bad'); R.engine = {ok:false}; });
+
+  /* 2. 节目单 */
+  timeoutFetch('/cctv1.m3u8', 12000).then(function (r) {
+    return r.res.text().then(function (txt) {
+      var frags = txt.split('\n').filter(function (l) { return l && l.charAt(0) !== '#' && /^http/i.test(l); });
+      R.manifest = {ok: r.res.ok, bytes: txt.length, frags: frags.length, first: frags[frags.length - 1]};
+      set('manifest', 'HTTP ' + r.res.status + ' · ' + txt.length + ' 字节 · 分片 ' + frags.length + ' 条 · ' + ms(performance.now() - r.t0), frags.length ? 'ok' : 'bad');
+      if (frags.length) {
+        var direct = frags[frags.length - 1];
+        /* 3. 分片：NAS 代理 */
+        probeFrag('/proxy.ts?=' + btoa(direct).replace(/\+/g,'-').replace(/\//g,'_'), 'proxy', 'p1');
+        /* 4. 分片：本机直连 */
+        probeFrag(direct, 'direct', 'p2');
+      } else {
+        set('p1', '节目单里没有分片地址', 'bad'); set('p2', '节目单里没有分片地址', 'bad');
+      }
+      verdict();
+    });
+  }).catch(function (e) { set('manifest', '失败 · ' + e.message, 'bad'); R.manifest = {ok:false}; verdict(); });
+
+  /* 5. hls.js */
+  set('hls', (window.Hls && window.Hls.isSupported && window.Hls.isSupported()) ? '可用' : '不可用（可能走原生 HLS）', window.Hls ? 'ok' : 'bad');
+
+  /* 6. 引擎诊断原文 */
+  timeoutFetch('/api/diag', 20000).then(function (r) {
+    return r.res.text().then(function (t) { document.getElementById('diag').textContent = t.slice(0, 4000); });
+  }).catch(function (e) { document.getElementById('diag').textContent = '读取诊断失败：' + e.message; });
+}
+
+function verdict() {
+  var parts = [];
+  if (R.engine && R.engine.ok === false) parts.push('引擎本身没响应 → 应用可能没跑起来，重启应用再看。');
+  if (R.manifest && R.manifest.ok === false) parts.push('连节目单都拿不到 → 引擎出流环节失败（央视频侧问题或引擎未就绪）。');
+  if (R.manifest && R.manifest.ok && R.proxy) parts.push(R.proxy.ok && R.proxy.bytes > 1000 ? 'NAS 代理能取到分片（服务端到央视是通的）。' : 'NAS 代理取分片失败（' + (R.proxy.code ? 'HTTP ' + R.proxy.code : R.proxy.err) + '）→ NAS 到央视 CDN 被拦或超时。');
+  if (R.manifest && R.manifest.ok && R.direct) parts.push(R.direct.ok && R.direct.bytes > 1000 ? '本机也能直连央视取分片。' : '本机直连央视取分片失败（' + (R.direct.code ? 'HTTP ' + R.direct.code : R.direct.err) + '）→ 主线路在你这边网络不通，靠备用线路。');
+  if (R.manifest && R.manifest.ok && R.proxy && R.direct) {
+    if (R.proxy.ok && R.direct.ok && R.proxy.ms > 15000) parts.push('两跳都能取，但都很慢（>15 秒/片）→ 直播会一直卡在起播，属带宽或 CDN 限速问题。');
+  }
+  set('verdict', parts.length ? parts.join(' ') : '各项都通，若仍黑屏请把下方引擎诊断原文一起发我。');
+}
+run();
+</script>
+</html>
