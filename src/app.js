@@ -216,11 +216,10 @@
       el.addEventListener("click", function () {
         var row = all[Number(el.getAttribute("data-i"))];
         if (!row) return;
-        var same = S.selected && S.selected.type === row.type && S.selected.slug === row.slug;
-        if (same) { startPlay(row); return; }
+        /* 点频道列表里的任意一行 = 立刻换台播放，不需要先选中再点一次 */
         S.selected = { type: row.type, slug: row.slug };
-        renderList();
-        renderInfo();
+        renderList(); renderInfo();
+        playSoon(row);
       });
     });
   }
@@ -320,7 +319,7 @@
         var row = all[Number(el.getAttribute("data-i"))];
         if (!row) return;
         S.selected = { type: row.type, slug: row.slug };
-        startPlay(row);
+        playSoon(row);
         renderOsd();
         $("#osd").classList.remove("collapsed");  /* 换台后保留频道栏 */
         clearTimeout(S.osdTimer);
@@ -546,12 +545,32 @@
 
   function setPlayState(text) { $("#playState").textContent = text; }
 
+  /* 换台节流：单击立刻播；连续快速连点时只落地最后一次，
+     避免给央视频开一堆会话（上游会直接返回「操作过于频繁」） */
+  var ZAP_MIN = 900;
+  function playSoon(row, line) {
+    var now = Date.now();
+    var wait = ZAP_MIN - (now - (S.lastStart || 0));
+    clearTimeout(S.zapTimer);
+    if (wait <= 0) {
+      S.lastStart = now;
+      startPlay(row, line);
+      return;
+    }
+    setPlayState("切换中…");
+    S.zapTimer = setTimeout(function () {
+      S.lastStart = Date.now();
+      startPlay(row, line);
+    }, wait);
+  }
+
   function startPlay(row, line) {
     var useLine = line || S.line;
     var url = playUrl(row, useLine);
     var video = $("#vid");
 
     destroyHls();
+    S.resolveTries = 0;
     S.playing = { type: row.type, slug: row.slug, name: row.name };
     S.switched = useLine === "backup";
     $("#idle").classList.add("hide");
@@ -578,8 +597,8 @@
       liveSyncDurationCount: 3,
       lowLatencyMode: false,
       enableWorker: true,
-      manifestLoadingTimeOut: 12000,
-      manifestLoadingMaxRetry: 3,
+      manifestLoadingTimeOut: 20000,
+      manifestLoadingMaxRetry: 6,
       levelLoadingTimeOut: 12000,
       levelLoadingMaxRetry: 5,
       fragLoadingTimeOut: 26000,
@@ -591,6 +610,21 @@
     hls.on(window.Hls.Events.ERROR, function (evt, data) {
       if (!data || !data.fatal) return;
       if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {
+        var code = data.response && data.response.code;
+        /* 503 = 引擎那边正在解析这个频道（两条线路都会 503），
+           切线路没有意义，原地退避重试即可 */
+        if (code === 503) {
+          S.resolveTries = (S.resolveTries || 0) + 1;
+          if (S.resolveTries <= 5) {
+            setPlayState("频道解析中…（第 " + S.resolveTries + " 次重试）");
+            setTimeout(function () { try { hls.startLoad(); } catch (e) { } },
+                       1200 * S.resolveTries);
+            return;
+          }
+          toast("该频道解析不出来，换一个试试（央视频侧暂无数据）", true);
+          setPlayState("该频道暂无数据");
+          return;
+        }
         if (useLine === "main" && !S.switched) {
           S.switched = true;
           S.line = "backup";
@@ -598,6 +632,7 @@
           startPlay(row, "backup");
           return;
         }
+        if (code === 404) toast("该频道的上游地址已失效（404）", true);
         setPlayState("网络错误，重连中…");
         try { hls.startLoad(); } catch (e) { }
         return;
