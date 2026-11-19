@@ -2,9 +2,9 @@
   "note": "本文件声明仓库里需要落地的二进制资产，由 .github/workflows/fetch-assets.yml 在 main 分支拉取、校验 sha256 后提交回仓库。落地完成后仓库自身即可自证完整性。",
   "assets": [
     {
-      "path": "ysplive/fpk/ysplive-1.1.9-fnos-all.fpk",
-      "url": "https://aka.doubaocdn.com/s/RgVsOavbeP",
-      "sha256": "5ff94ecbff76997d1631f9fd27eff8339bb7ae0cab968edaef027af216792d58"
+      "path": "ysplive/fpk/ysplive-1.1.10-fnos-all.fpk",
+      "url": "https://aka.doubaocdn.com/s/WKOPBV71TQ",
+      "sha256": "965966c63873f19e5cb1b30aeee053b4c7819798953066216edc08f6e77f8cad"
     },
     {
       "path": "ysplive/ICON.PNG",
@@ -18,13 +18,13 @@
     },
     {
       "path": "ysplive/README.md",
-      "url": "https://aka.doubaocdn.com/s/9rivWbBDDe",
-      "sha256": "a5728434c7412cba3bf2775e3e8fb716f518942f45996210f050669e1f01d33a"
+      "url": "https://aka.doubaocdn.com/s/0q6kHfyzMh",
+      "sha256": "edd307784122b2d4410a59a1c9d8dfa0252f6831852ef14e69918b3d27bf35bf"
     },
     {
       "path": "src",
-      "url": "https://aka.doubaocdn.com/s/mqtQro9fux",
-      "sha256": "7d85c1c0be4338daebf2bddddf53dcef15cbda2e63c44afcfc73360377ed3713",
+      "url": "https://aka.doubaocdn.com/s/2YIKr1HVNM",
+      "sha256": "b46b4cf0a2acba1ead0f8ea139e8e2f1c3565f567c29bf5b92e54d235d9b1db8",
       "archive": "tar.gz",
       "strip_components": 1
     }
