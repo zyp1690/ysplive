@@ -475,50 +475,40 @@
     return "/" + row.slug + ".m3u8";
   }
 
-  /* 老页面可能没有 #tapStart，缺了就现场补一个，避免空引用 */
-  function tapEl() {
-    var el = $("#tapStart");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "tapStart";
-      el.className = "tapstart";
-      el.textContent = "点击画面开始播放";
-      var scr = $("#screen");
-      if (scr) scr.appendChild(el);
-      el.addEventListener("click", function (e) { e.stopPropagation(); resumePlay(); });
-    }
-    return el;
-  }
-  function tapOn(on) {
-    var el = tapEl();
-    if (!el) return;
-    if (on) el.classList.add("on"); else el.classList.remove("on");
-  }
+  /* 覆盖层提示已取消：这两个函数保留为空实现，兼容旧调用点 */
+  function tapOn(_on) { }
 
   function safePlay(v) {
     if (!v) return;
+    /* 不做静音兜底：始终带声音播放。被浏览器拦下时只记一个标记，
+       用户任意点一下画面 / 按一个键就恢复（不弹任何提示块）。
+       同时做几次静默重试：有些浏览器在用户碰过站点后就会放行。 */
+    v.muted = false;
     var p = v.play();
     if (!p || !p.catch) return;
     p.catch(function () {
-      /* 带声音的自动播放被拦：先静音播起来，用户一点再开声音 */
-      v.muted = true;
-      var p2 = v.play();
-      if (!p2 || !p2.then) { S.mutedAuto = true; return; }
-      p2.then(function () {
-        S.mutedAuto = true;
-        setPlayState("已静音播放 · 点画面开声音");
-      }).catch(function () {
-        S.needGesture = true;
-        setPlayState("点一下画面开始播放");
-        tapOn(true);
-      });
+      S.needGesture = true;
+      setPlayState("点一下画面开始播放");
+      clearTimeout(S.playRetry);
+      var tries = 0;
+      (function again() {
+        if (!S.needGesture || $("#vid").paused === false) return;
+        tries += 1;
+        if (tries > 3) return;
+        S.playRetry = setTimeout(function () {
+          if (!S.needGesture) return;
+          var vv = $("#vid");
+          vv.muted = false;
+          var pp = vv.play();
+          if (pp && pp.then) pp.then(function () { S.needGesture = false; setPlayState("直播中"); }).catch(function () { again(); });
+        }, 1000 * tries);
+      })();
     });
   }
 
   function resumePlay() {
     var v = $("#vid");
     S.needGesture = false;
-    S.mutedAuto = false;
     tapOn(false);
     /* 一条数据都没拿到：直接从主线路重开当前频道，而不是干等 */
     if (S.playing && v.readyState === 0) {
@@ -592,17 +582,22 @@
     }
 
     var hls = new window.Hls({
-      maxBufferLength: 20,
-      maxMaxBufferLength: 40,
-      liveSyncDurationCount: 3,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
+      backBufferLength: 10,
+      liveSyncDurationCount: 2,
       lowLatencyMode: false,
       enableWorker: true,
+      startFragPrefetch: true,
+      testBandwidth: false,
+      abrEwmaDefaultEstimate: 2500000,
       manifestLoadingTimeOut: 20000,
       manifestLoadingMaxRetry: 6,
       levelLoadingTimeOut: 12000,
       levelLoadingMaxRetry: 5,
       fragLoadingTimeOut: 26000,
-      fragLoadingMaxRetry: 6
+      fragLoadingMaxRetry: 6,
+      nudgeMaxRetry: 8
     });
     S.hls = hls;
     var mediaRetry = 0;
@@ -718,9 +713,7 @@
     S.needGesture = false;
   });
 
-  $("#vid").addEventListener("pause", function () {
-    if (S.player && S.playing) tapOn(true);
-  });
+  $("#vid").addEventListener("pause", function () { });
 
   $("#vid").addEventListener("timeupdate", function () {
     var v = $("#vid");

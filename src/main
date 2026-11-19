@@ -38,7 +38,7 @@ ENGINE_PORT=8788
 MODE=all
 LINKS=6
 DEBOUNCE=10
-CACHE_MB=200
+CACHE_MB=320
 
 if [ -r "$CONF" ]; then
     # shellcheck disable=SC1090
@@ -63,8 +63,8 @@ case "$DEBOUNCE" in
     *) [ "$DEBOUNCE" -le 120 ] || DEBOUNCE=10 ;;
 esac
 case "$CACHE_MB" in
-    ''|*[!0-9]*) CACHE_MB=200 ;;
-    *) [ "$CACHE_MB" -le 2048 ] || CACHE_MB=200 ;;
+    ''|*[!0-9]*) CACHE_MB=320 ;;
+    *) [ "$CACHE_MB" -le 2048 ] || CACHE_MB=320 ;;
 esac
 
 log_msg() {

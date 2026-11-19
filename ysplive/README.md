@@ -6,13 +6,13 @@
 
 | 文件 | 说明 |
 | --- | --- |
-| `ysplive-1.1.11-fnos-all.fpk` | 安装包，x86 与 ARM 通用（纯 Python 文本文件 + 网页资源，无架构二进制） |
-| `ysplive-1.1.11-fnos-all.fpk.sha256` | 校验和 |
+| `ysplive-1.1.12-fnos-all.fpk` | 安装包，x86 与 ARM 通用（纯 Python 文本文件 + 网页资源，无架构二进制） |
+| `ysplive-1.1.12-fnos-all.fpk.sha256` | 校验和 |
 | `build-fpk.sh` | 本地一键重建脚本（自动按 manifest 的 appname/version 命名产物） |
 
 ## 安装
 
-1. 飞牛 fnOS → **应用中心** → 右下角 **手动安装** → 选择 `ysplive-1.1.11-fnos-all.fpk`；
+1. 飞牛 fnOS → **应用中心** → 右下角 **手动安装** → 选择 `ysplive-1.1.12-fnos-all.fpk`；
 2. 安装向导里确认**服务端口**（默认 `8767`）与播放参数；
 3. 装完桌面出现「ysplive 央视频直播」图标，点开即进入管理界面；应用中心里可启动 / 停止 / 修改配置。
 
@@ -23,7 +23,7 @@
 命令行安装 / 卸载：
 
 ```bash
-sudo appcenter-cli install-fpk /vol1/1000/ysplive-1.1.11-fnos-all.fpk
+sudo appcenter-cli install-fpk /vol1/1000/ysplive-1.1.12-fnos-all.fpk
 sudo appcenter-cli status --appname ysplive
 sudo appcenter-cli uninstall ysplive
 ```
