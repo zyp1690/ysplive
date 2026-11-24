@@ -283,6 +283,8 @@ table.grid tr:last-child td{border-bottom:0}
   .stage{grid-template-columns:minmax(210px,240px) minmax(222px,252px) minmax(0,1fr);gap:10px;padding:10px}
 }
 @media (max-width:880px){
+  body{overscroll-behavior:none}
+
   html,body{width:100%;max-width:100%;overflow-x:hidden}
   .shell{height:auto;overflow:visible;width:100%;max-width:100vw}
   .stage{overflow:visible;grid-template-rows:none;display:flex;flex-direction:column;width:100%;max-width:100vw}
@@ -378,4 +380,43 @@ table.grid tr:last-child td{border-bottom:0}
 .osd-hint{
   position:absolute;left:50%;bottom:18px;transform:translateX(-50%);
   font-size:12.5px;color:rgba(226,238,250,.62);letter-spacing:.02em;white-space:nowrap;
+}
+
+/* ------------------------------------------------ 手机端适配 */
+@media (hover:none), (pointer:coarse){
+  html,body,.shell,.screen{-webkit-tap-highlight-color:transparent}
+  .screen,.osd,button,.chip,.row,video{touch-action:manipulation}
+  .row{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+}
+
+@media (max-width:880px){
+  /* 播放态铺满整屏，不再用 16:9 挤在顶部 */
+  .shell.player{position:fixed;inset:0;width:100vw;height:100dvh;max-height:100dvh;overflow:hidden;z-index:9}
+  .shell.player .stage{display:block;height:100%;padding:0;gap:0}
+  .shell.player .screen{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;border:0;border-radius:0;min-height:0}
+  .shell.player .screen video{width:100%;height:100%;object-fit:contain;background:#000}
+
+  /* 选台浮层：整屏竖排，列表占满高度，信息卡压成一行 */
+  /* 底部抽屉：上方留出约四成画面，点画面空白即可收起浮层 */
+  .osd{padding:0;flex-direction:column;align-items:stretch;justify-content:flex-end;
+       background:rgba(3,9,15,.42)}
+  .osd-tools{position:absolute;top:10px;right:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;z-index:9}
+  .osd-info{
+    order:1;width:100%;flex:none;padding:12px 14px 10px;
+    border:0;border-top:1px solid rgba(255,255,255,.10);border-radius:16px 16px 0 0;
+    background:rgba(10,20,32,.97);
+    display:flex;flex-direction:row;align-items:center;gap:8px 10px;flex-wrap:wrap;
+  }
+  .osd-info .oi-body{display:none}
+  .oi-idx{font-size:19px}
+  .oi-name{font-size:17px;margin-top:0;flex:0 1 auto}
+  .oi-group{display:none}
+  .oi-watch{margin-top:0}
+  .osd-list{order:2;flex:0 1 auto;width:100%;max-height:58dvh;border:0;border-radius:0;
+            background:rgba(8,16,27,.97)}
+  .osd-list .rows{padding:0 8px calc(16px + env(safe-area-inset-bottom));overscroll-behavior:contain}
+  .osd-list .row{min-height:56px;padding:10px 12px}
+  .osd-hint{display:none}
+  .osd.collapsed .osd-info{border-radius:16px}
+  .screenbar{bottom:calc(10px + env(safe-area-inset-bottom))}
 }

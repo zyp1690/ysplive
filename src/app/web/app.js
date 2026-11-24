@@ -346,8 +346,9 @@
     if (S.player) return;
     S.player = true;
     $("#shell").classList.add("player");
+    var coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
     var el = $("#screen");
-    if (el.requestFullscreen && !document.fullscreenElement) {
+    if (!coarse && el.requestFullscreen && !document.fullscreenElement) {
       try { el.requestFullscreen({ navigationUI: "hide" }); } catch (e) { }
     }
   }
@@ -375,7 +376,15 @@
         var r = fn.call(el, { navigationUI: "hide" });
         if (r && r.catch) r.catch(function () { });
       } catch (e) { }
+      return;
     }
+    /* iPhone 只有 video 元素自带原生全屏，div 上没有任何 Fullscreen API */
+    var v = $("#vid");
+    if (v && v.webkitEnterFullscreen) {
+      try { v.webkitEnterFullscreen(); } catch (e) { }
+      return;
+    }
+    enterPlayer();   /* 其它手机浏览器：至少切到页面内满屏 */
   }
 
   function exitFs() {
@@ -407,10 +416,7 @@
     if (!S.player) return;
     var v = $("#vid");
     if (S.suppressClick) { S.suppressClick = false; return; }
-    if (S.needGesture || (S.playing && v.paused)) {
-      resumePlay();
-      return;
-    }
+    if (needsGesture()) { S.needGesture = false; resumePlay(); return; }
     var now = Date.now();
     var dx = e.clientX - lastX, dy = e.clientY - lastY;
     /* 双击：时间 < 350ms 且落点基本重合，第二下即使正落在刚弹出的面板上也算 */
@@ -430,6 +436,30 @@
     lastAction = "osd";
     toggleOsd();
   });
+
+  /* 手机：自己判单击/双击。iOS Safari 不触发 dblclick，
+     而且双击会被浏览器当成缩放，所以触摸自己处理并吃掉默认行为。 */
+  var tapT = 0, tapX = 0, tapY = 0, tapTimer = 0;
+  function clearTapTimer() { if (tapTimer) { clearTimeout(tapTimer); tapTimer = 0; } }
+  $("#screen").addEventListener("touchend", function (e) {
+    if (!S.player || !e.changedTouches || !e.changedTouches.length) return;
+    if (e.touches && e.touches.length > 0) return;          /* 多指手势不处理 */
+    var t = e.changedTouches[0];
+    if (inPanel(e.target)) return;                          /* 点在浮层面板：交给面板自己的 click */
+    S.suppressClick = true;                                 /* 吃掉随后合成的 click */
+    if (needsGesture()) { clearTapTimer(); tapT = 0; S.needGesture = false; resumePlay(); return; }
+    var now = Date.now(), dx = t.clientX - tapX, dy = t.clientY - tapY;
+    if (now - tapT < 330 && (dx * dx + dy * dy) < 2500) {   /* 双击：直接全屏，首击不再动浮层 */
+      e.preventDefault();
+      clearTapTimer(); tapT = 0;
+      toggleFullscreen();
+      return;
+    }
+    tapT = now; tapX = t.clientX; tapY = t.clientY;
+    /* 手机上一次点击要等 300ms 才能确定不是双击，避免浮层抢走第二击 */
+    clearTapTimer();
+    tapTimer = setTimeout(function () { tapTimer = 0; tapT = 0; toggleOsd(); }, 300);
+  }, { passive: false });
 
   /* 双击事件本身用来吃掉浏览器默认行为（部分电视浏览器会放大页面） */
   $("#screen").addEventListener("dblclick", function (e) {
@@ -504,6 +534,13 @@
         }, 1000 * tries);
       })();
     });
+  }
+
+  /* 只有视频真的暂停了才算需要手势；needGesture 标记可能滞后（例如重试循环已放弃、
+     播放其实已经恢复），不能再拿它拦掉单击/双击 */
+  function needsGesture() {
+    var v = $("#vid");
+    return !!(S.playing && v.paused);
   }
 
   function resumePlay() {
