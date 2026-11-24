@@ -12,16 +12,6 @@
       "sha256": "4dd88cd5cd6dcaa58fc794582c3d61e63ceee305a835010d24c0cea532e622c3"
     },
     {
-      "path": "ysplive/ICON.PNG",
-      "url": "https://aka.doubaocdn.com/s/BfaLpUiiWo",
-      "sha256": "9ee2f48b9e7b3fd150bd0df92b789cd3e1971f853caedb186459de312aa9578a"
-    },
-    {
-      "path": "ysplive/ICON_256.PNG",
-      "url": "https://aka.doubaocdn.com/s/k6TecwH69S",
-      "sha256": "6bd38084c67bd1e0c39fa70ac22ce2199216b3f7e546f4ffae381ad9e9e5aadd"
-    },
-    {
       "path": "ysplive/README.md",
       "url": "https://aka.doubaocdn.com/s/ha8CYQH9jr",
       "sha256": "81a3b99cd9325de3fde02c3c8f137c44eafa497a26d7ff4e864c27bf03897f3c"
@@ -31,7 +21,7 @@
       "url": "https://aka.doubaocdn.com/s/dzSGVmAatt",
       "sha256": "ff7ea809c6729c8fefa443f757636610c2bde9341dfeaa56159dbffef5977f4a",
       "archive": "tar.gz",
-      "strip_components": 1
+      "strip_components": 0
     }
   ]
 }
