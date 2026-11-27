@@ -158,7 +158,11 @@
 
     var scopeText = { lan: "内网访问 · 可修改", ipv6: "IPv6 访问 · 可修改", "public": "公网 IPv4 · 只读" }[S.scope] || "内网访问";
     $("#fScope").textContent = scopeText;
-    $("#subUrl").value = location.protocol + "//" + location.host + "/all.m3u";
+    var base = location.protocol + "//" + location.host + "/all.m3u";
+    $("#subUrl").value = base;
+    if ($("#subUrlBk")) $("#subUrlBk").value = base + "?line=bk";
+    if ($("#subUrlDual")) $("#subUrlDual").value = base + "?dual=1";
+    renderUpdate(data.update || null, data.version);
 
     [ $("#btnAdd"), $("#btnSiteSave"), $("#btnChanSave") ].forEach(function (b) {
       if (b) b.disabled = !S.editable;
@@ -970,13 +974,77 @@
       .catch(function (e) { toast("保存失败：" + e.message, true); });
   });
 
-  $("#btnCopy").addEventListener("click", function () {
-    var input = $("#subUrl");
+  function renderUpdate(info, current) {
+    var now = $("#verNow"), latest = $("#verLatest"), msg = $("#verMsg"), btn = $("#btnUpgrade");
+    if (!now) return;
+    now.textContent = (current || (info && info.current) || "—");
+    latest.textContent = (info && info.latest) || "—";
+    if (!info || info.checking) {
+      msg.textContent = "正在向 GitHub 检查新版本…";
+      btn.disabled = true;
+      return;
+    }
+    if (info.error) {
+      msg.textContent = "检测失败：" + info.error + "（NAS 可能访问不到 GitHub，可稍后重试）";
+      btn.disabled = true;
+      return;
+    }
+    if (info.has_update) {
+      msg.textContent = "发现新版本 " + info.latest + "（当前 " + (info.current || current) + "），点「下载升级包」保存到 NAS。";
+      btn.disabled = !S.editable;
+      btn.textContent = "下载 " + (info.fpk_name || "升级包");
+    } else {
+      msg.textContent = "已是最新版本（当前 " + (info.current || current || "—") + "）。";
+      btn.disabled = true;
+      btn.textContent = "下载升级包";
+    }
+  }
+
+  function checkVer(force) {
+    var b = $("#btnCheckVer");
+    if (b.disabled) return;
+    b.disabled = true;
+    $("#verMsg").textContent = "正在检查…";
+    fetch("/api/update" + (force ? "?force=1" : "")).then(function (r) { return r.json(); })
+      .then(function (d) { b.disabled = false; renderUpdate(d, null); })
+      .catch(function (e) { b.disabled = false; $("#verMsg").textContent = "检测失败：" + e.message; });
+  }
+
+  if ($("#btnCheckVer")) $("#btnCheckVer").addEventListener("click", function () { checkVer(true); });
+
+  if ($("#btnUpgrade")) $("#btnUpgrade").addEventListener("click", function () {
+    var b = this;
+    b.disabled = true;
+    $("#verMsg").textContent = "正在下载安装包（约 0.4 MB）…";
+    fetch("/api/update/download", { method: "POST" }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        b.disabled = false;
+        if (d.error) { $("#verMsg").textContent = "下载失败：" + d.error; return; }
+        var shaText = d.sha_ok === true ? "sha256 已校验一致" :
+          (d.sha_ok === false ? "sha256 校验不一致，请勿安装！" : "sha256 " + String(d.sha256 || "").slice(0, 16) + "…");
+        $("#verMsg").textContent = "已下载到 " + d.path + "（" + shaText + "）。到应用中心「手动安装」选中该文件即可，配置与频道会保留。";
+        toast("升级包已下载");
+      })
+      .catch(function (e) { b.disabled = false; $("#verMsg").textContent = "下载失败：" + e.message; });
+  });
+
+  function copyInput(input, msg) {
+    if (!input) return;
     input.select(); input.setSelectionRange(0, 99999);
-    var done = function () { toast("订阅地址已复制"); };
+    var done = function () { toast(msg); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(input.value).then(done).catch(function () { document.execCommand("copy"); done(); });
     } else { document.execCommand("copy"); done(); }
+  }
+
+  $("#btnCopy").addEventListener("click", function () {
+    copyInput($("#subUrl"), "订阅地址已复制");
+  });
+  if ($("#btnCopyBk")) $("#btnCopyBk").addEventListener("click", function () {
+    copyInput($("#subUrlBk"), "备用线路订阅已复制");
+  });
+  if ($("#btnCopyDual")) $("#btnCopyDual").addEventListener("click", function () {
+    copyInput($("#subUrlDual"), "双线路订阅已复制");
   });
 
   $$("[data-close]").forEach(function (el) {

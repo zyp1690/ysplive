@@ -6,13 +6,13 @@
 
 | 文件 | 说明 |
 | --- | --- |
-| `ysplive-1.1.13-fnos-all.fpk` | 安装包，x86 与 ARM 通用（纯 Python 文本文件 + 网页资源，无架构二进制） |
-| `ysplive-1.1.13-fnos-all.fpk.sha256` | 校验和 |
+| `ysplive-1.1.16-fnos-all.fpk` | 安装包，x86 与 ARM 通用（纯 Python 文本文件 + 网页资源，无架构二进制） |
+| `ysplive-1.1.16-fnos-all.fpk.sha256` | 校验和 |
 | `build-fpk.sh` | 本地一键重建脚本（自动按 manifest 的 appname/version 命名产物） |
 
 ## 安装
 
-1. 飞牛 fnOS → **应用中心** → 右下角 **手动安装** → 选择 `ysplive-1.1.13-fnos-all.fpk`；
+1. 飞牛 fnOS → **应用中心** → 右下角 **手动安装** → 选择 `ysplive-1.1.16-fnos-all.fpk`；
 2. 安装向导里确认**服务端口**（默认 `8767`）与播放参数；
 3. 装完桌面出现「ysplive 央视频直播」图标，点开即进入管理界面；应用中心里可启动 / 停止 / 修改配置。
 
@@ -23,7 +23,7 @@
 命令行安装 / 卸载：
 
 ```bash
-sudo appcenter-cli install-fpk /vol1/1000/ysplive-1.1.13-fnos-all.fpk
+sudo appcenter-cli install-fpk /vol1/1000/ysplive-1.1.16-fnos-all.fpk
 sudo appcenter-cli status --appname ysplive
 sudo appcenter-cli uninstall ysplive
 ```
@@ -96,6 +96,29 @@ sudo appcenter-cli uninstall ysplive
 
 **保存位置**：界面里改的内容存在 `$TRIM_PKGVAR/data/ui-config.json`，节目单缓存是同目录的 `epg.json`，升级保留、卸载清理；上游引擎自己的状态（设备身份、频道缓存）存在同目录的其它 json，二者互不干扰。
 
+## 检查更新与升级（v1.1.16 起）
+
+管理面板顶部有一张「版本与升级」卡片：点「检查更新」会读 GitHub 仓库 `zyp1690/ysplive`，跟本地版本比；有新版的「下载升级包」按钮亮起，点一下就把 FPK 下到 `$TRIM_PKGVAR/data/updates/` 并算 sha256 校验，然后到应用中心「手动安装」选这个文件，配置与频道都保留。
+
+检查顺序（前者失败自动退后者）：
+
+1. 仓库里的 `ysplive/fpk/latest.json`（单文件，不受 GitHub API 每分钟限流影响，`url` 里可以直接写国内 CDN 地址）：
+
+```json
+{
+  "version": "1.1.16",
+  "fpk": "ysplive-1.1.16-fnos-all.fpk",
+  "url": "https://cdn.example.com/ysplive-1.1.16-fnos-all.fpk",
+  "size": 441547,
+  "sha256": "6db9c12d9e7288914c595978b5c5ea9f73b2be2f8f5fa03ae7df83319a674492",
+  "notes": "这一版改了什么"
+}
+```
+
+2. GitHub API 列目录（未登录每小时 60 次，超了会提示限流）。
+
+想完全绕开 GitHub（比如 NAS 出网被拦），设环境变量 `YSP_UPDATE_META_URL` 指向自己维护的这份 json，程序就只走这个地址。后台默认每 6 小时自动查一次，有新版写日志提醒；`YSP_UPDATE_INTERVAL=0` 关掉，单位是秒。
+
 ## IPv6 支持
 
 - 界面服务用双栈套接字绑定（`::` 且关闭 `IPV6_V6ONLY`），**同一个端口 IPv4 / IPv6 都能进**；系统不支持 IPv6 时自动回退纯 IPv4，不会启动失败。
@@ -113,10 +136,30 @@ sudo appcenter-cli uninstall ysplive
 | 只看央视 / 只看卫视 | `http://NAS地址:8767/all.m3u?group=央视` |
 | 只看 4K/8K 频道 | `http://NAS地址:8767/all.m3u?k4=1` |
 | 单频道直连（给播放器单路用） | `http://NAS地址:8767/cctv1.m3u8` |
+| 备用线路订阅（全部强制走备用） | `http://NAS地址:8767/all.m3u?line=bk` |
+| 双线路订阅（每条频道主/备两条目） | `http://NAS地址:8767/all.m3u?dual=1` |
+| 单频道强制线路 | `http://NAS地址:8767/cctv1.m3u8?line=jce`（主）/ `?line=bk`（备） |
 | 系统健康度（JSON） | `http://NAS地址:8767/health` |
 | 实时诊断报告（纯文本） | `http://NAS地址:8767/diag` |
 
+三份订阅的用法：默认 `/all.m3u` 每条频道内部已经会自动主备切换（JCE 不通就切 bkliveinfo），电视端只用这一条即可；如果播放器卡在某个频道不动，把它换成 `?line=bk` 那份（整份走备用线路，首屏更快），或者用 `?dual=1`，频道列表里会出现「CCTV-1 综合」和「CCTV-1 综合·备」两条，手动点第二条。
+
+M3U 标准本身没有“一条条目多线路自动故障转移”的字段，播放器也不会自己换条目；所以自动切换放在服务端（同一条 URL 内部完成），备用订阅和双线订阅解决的是“服务端主备都拿不到、或播放器自己卡死”的场景。
+
 `/all.m3u`、`/cctvX.m3u8`、`/proxy.ts`、`/health`、`/diag` 全部由界面进程转发给内部引擎，并透传原始 `Host`——上游是按请求 Host 拼分片地址的，所以电视/播放器拿到的地址天然指向界面端口，不需要改写播放列表。
+
+### 某个频道一打开就「暂无数据」时看这里（v1.1.14 起）
+
+`/health` 新增两个字段，用浏览器打开就能定位问题：
+
+| 字段 | 含义 |
+| --- | --- |
+| `line_mode` | 当前有多少路走在主线路（`jce`）、多少路停在备用线路（`bk`） |
+| `failing_channels` | 被点播过但 45 秒内没再拿到播放列表的频道（真正播不出来的就是这些） |
+
+`http://NAS地址:8767/health?full=1` 还会多给 `channel_detail`，逐路列出线路、距上次成功的秒数和最近一次错误原文。
+
+v1.1.14 起主线路（JCE）返回空表、被限流或超时时，同一次请求内就会自动改用 `bkliveinfo` 备用线路，不再直接把 503 抛给播放器；停靠备用线路的频道每 5 分钟回试一次主线路，恢复就自动切回去（7 天回看只在主线路可用）。另外默认每 6 小时做一次软复位（清缓存与失败冷却，不重启进程），可用 `--auto-restart-sec 0` 关闭。
 
 ## 架构
 

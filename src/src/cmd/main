@@ -39,6 +39,7 @@ MODE=all
 LINKS=6
 DEBOUNCE=10
 CACHE_MB=320
+AUTO_RESTART=21600
 
 if [ -r "$CONF" ]; then
     # shellcheck disable=SC1090
@@ -65,6 +66,10 @@ esac
 case "$CACHE_MB" in
     ''|*[!0-9]*) CACHE_MB=320 ;;
     *) [ "$CACHE_MB" -le 2048 ] || CACHE_MB=320 ;;
+esac
+case "$AUTO_RESTART" in
+    ''|*[!0-9]*) AUTO_RESTART=21600 ;;
+    *) [ "$AUTO_RESTART" -le 86400 ] || AUTO_RESTART=21600 ;;
 esac
 
 log_msg() {
@@ -154,6 +159,7 @@ start_engine() {
         --no-engine \
         --data-dir "$VAR/data" \
         --cache-mb "$CACHE_MB" \
+        --auto-restart-sec "$AUTO_RESTART" \
         --links-per-device "$LINKS" \
         --zap-debounce "$DEBOUNCE" \
         $( [ "$MODE" = "only4k" ] && printf '%s' "--only-4k" ) \

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#08111c">
 <title>央视频直播</title>
-<link rel="stylesheet" href="/static/app.css?v=1113">
+<link rel="stylesheet" href="/static/app.css?v=1116">
 </head>
 <body>
 <div class="shell" id="shell">
@@ -152,7 +152,26 @@
           <input id="subUrl" readonly>
           <button class="btn ghost" id="btnCopy">复制</button>
         </div>
-        <p class="muted small">填到电视/播放器；这里的改动会同步进这份订阅单。</p>
+        <div class="row-inline">
+          <input id="subUrlBk" readonly>
+          <button class="btn ghost" id="btnCopyBk">复制</button>
+        </div>
+        <p class="muted small">主线路订阅：每条频道内部已自动主备切换。若播放器卡住，换上「备用线路订阅」＝全部频道强制走备用线路；想让列表里同时出现主/备两条，用「双线路订阅」。</p>
+        <div class="row-inline">
+          <input id="subUrlDual" readonly>
+          <button class="btn ghost" id="btnCopyDual">复制</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>版本与升级</h3>
+        <div class="row-inline">
+          <span class="muted small">当前 <b id="verNow">—</b></span>
+          <span class="muted small">最新 <b id="verLatest">—</b></span>
+          <button class="btn ghost" id="btnCheckVer">检查更新</button>
+          <button class="btn accent" id="btnUpgrade" disabled>下载升级包</button>
+        </div>
+        <p class="muted small" id="verMsg">点「检查更新」会去 GitHub 仓库（zyp1690/ysplive）比对版本；有新版就下载到 NAS 的数据目录，再在应用中心「手动安装」选中它，配置与频道全部保留。</p>
       </div>
 
       <div class="card">
@@ -196,7 +215,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="/static/hls.js?v=1113"></script>
-<script src="/static/app.js?v=1113"></script>
+<script src="/static/hls.js?v=1116"></script>
+<script src="/static/app.js?v=1116"></script>
 </body>
 </html>

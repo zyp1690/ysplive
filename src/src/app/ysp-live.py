@@ -53,7 +53,9 @@ socket.getaddrinfo = new_getaddrinfo
 # ==========================================
 
 urllib .request .install_opener (urllib .request .build_opener (urllib .request .ProxyHandler ({}))) 
-__version__ ='1.0.0'
+__version__ ='1.1.16'
+ENGINE_VERSION =__version__ 
+CHANNEL_STALE_SEC =45 
 AUTHOR_COMMUNITY ='https://t.me/+rgxyQeDLtjcxM2U1'
 AUTHOR_CHANNEL ='https://t.me/tmxktg'
 AUTHOR_NOTICE =f'''📢 公告
@@ -2284,7 +2286,7 @@ def jce_timeshift_url (pid ,sid ,start ,end ,stream ='fhd'):
     req =urllib .request .Request ('https://jacc.ysp.cctv.cn',data =packet ,method ='POST')
     req .add_header ('Content-Type','application/octet-stream')
     with robust_urlopen (req ,timeout =15 )as resp :
-        raw =resp .read ()
+        raw =read_body_tolerant (resp )
     resp_body =_unwrap (raw )
     if not resp_body :
         raise RuntimeError ('bad response')
@@ -2379,10 +2381,26 @@ def bk_playurls (channel_id ,live_pid ,defn ='fhd'):
         raise RuntimeError ('no playurl')
     urls .sort (key =lambda u :(0 if 'bklive-'in u else 1 ,u ))
     return urls 
+def read_body_tolerant (r ,limit =4 *1024 *1024 ):
+    """容忍上游提前断连的读取：Content-Length 声明了但连接被掐断时，保留已收到的部分而不是整体失败。"""
+    buf =bytearray ()
+    while True :
+        try :
+            chunk =r .read1 (16384 )
+        except http .client .IncompleteRead as e :
+            if e .partial :
+                buf .extend (e .partial )
+            break 
+        if not chunk :
+            break 
+        buf .extend (chunk )
+        if len (buf )>=limit :
+            break 
+    return bytes (buf )
 def fetch_abs_playlist (url ,depth =0 ):
     req =urllib .request .Request (url ,headers ={'User-Agent':'qqlive','Referer':'https://live.cctv.cn/','Accept':'application/vnd.apple.mpegurl,application/json,*/*'})
     with robust_urlopen (req ,timeout =10 )as r :
-        text =r .read ().decode ('utf-8','replace')
+        text =read_body_tolerant (r ).decode ('utf-8','replace')
         final =r .geturl ()
     if depth <2 :
         lines =text .splitlines ()
@@ -2506,6 +2524,7 @@ LINK_IDLE_TIMEOUT =15.0
 WINDOW =300 
 MAX_SEGS =120 
 BK_URL_TTL =300 
+JCE_RETRY_SEC =300 
 BACKEND_CHANNELS ={
 'cctv1','cctv2','cctv3','cctv4','cctv5','cctv5p','cctv7','cctv8',
 'cctv9','cctv10','cctv11','cctv12','cctv13','cctv14','cctv15',
@@ -2743,6 +2762,8 @@ class Channel :
         self .bk_urls =[]
         self .bk_urls_time =0.0 
         self .bk_playlist =''
+        self .bk_mode_since =0.0 
+        self .fail_streak =0 
         self ._starting =False 
         self .last_built_playlist =''
         self .last_built_time =0.0 
@@ -2751,12 +2772,12 @@ def seg_key (url ,pdt ):
         return 'pdt:'+pdt 
     p =urllib .parse .urlsplit (url )
     return p .scheme +'://'+p .netloc +p .path 
-def jce_fetch (ch ):
+def jce_fetch (ch ,timeout =20.0 ):
     global_flow_limiter .wait_slot ()
     now =int (time .time ())
     m3u8_url =jce_timeshift_url (ch .pid ,ch .sid ,now -WINDOW ,now ,ch .defn )
     req =urllib .request .Request (m3u8_url ,headers ={'User-Agent':UA })
-    with robust_urlopen (req ,timeout =20 )as r :
+    with robust_urlopen (req ,timeout =timeout )as r :
         text =r .read ().decode ('utf-8','replace')
     segs ,dur ,pdt =([],6.0 ,'')
     for line in text .splitlines ():
@@ -2782,7 +2803,9 @@ def defn_label (defn ):
         return '720p'
     return defn or '1080p'
 def jce_refresh (ch ):
-    segs =jce_fetch (ch )
+    # 冷启动（缓存为空）时用更短的超时，保证“JCE 失败 → 备用线路”能在播放器单次请求内完成
+    cold =not ch .order 
+    segs =jce_fetch (ch ,timeout =4.0 if cold else 20.0 )
     with ch .lock :
         added =0 
         is_init =not ch .order 
@@ -2856,21 +2879,58 @@ def bk_refresh (ch ):
     ch .bk_urls =[]
     ch .bk_urls_time =0 
     raise RuntimeError (last_err [:120 ]or 'bk playlist failed')
+
+def _drop_jce_buffer (ch ):
+    with ch .lock :
+        ch .segments .clear ()
+        ch .order .clear ()
+        ch .seen_keys .clear ()
+        ch .last_pdt =''
+        ch .seq =0 
+def enter_bk_mode (ch ,reason =''):
+    if ch .mode =='bk':
+        return 
+    _drop_jce_buffer (ch )
+    ch .mode ='bk'
+    ch .bk_mode_since =time .time ()
+    log (f'[{ch .slug }] JCE 异常/限流，自动切换 bkliveinfo 备用通道 ({reason })',min_interval =10.0 )
+def enter_jce_mode (ch ,reason =''):
+    if ch .slug in FORCE_BK or ch .mode =='jce':
+        return 
+    with ch .lock :
+        ch .bk_playlist =''
+    ch .mode ='jce'
+    ch .last_built_playlist =''
+    ch .last_built_time =0.0 
+    log (f'[{ch .slug }] 主线路已恢复，切回 JCE ({reason })',min_interval =10.0 )
 def refresh_once (ch ):
     try :
+        ok =False 
         if ch .mode =='bk':
             ok =bk_refresh (ch )
+            if not ok :
+                return False 
         else :
             try :
                 ok =jce_refresh (ch )
-            except DeadHostError :
-                ch .mode ='bk'
-                log (f'[{ch .slug }] JCE 域名受限，自动切换 bkliveinfo 备用通道',min_interval =10.0 )
+            except DeadHostError as e :
+                enter_bk_mode (ch ,'JCE 域名受限')
                 ok =bk_refresh (ch )
+            except Exception as e :
+                # JCE 返回空表 / 限流 / 超时：同一次请求内立刻改用备用线路，避免直接把 503 抛给播放器
+                enter_bk_mode (ch ,(type (e ).__name__ +': '+str (e ))[:100 ])
+                try :
+                    ok =bk_refresh (ch )
+                except Exception as bk_err :
+                    ch .last_error =('JCE: %s; BK: %s'%(str (e )[:60 ],str (bk_err )[:60 ]))[:120 ]
+                    log (f'[{ch .slug }] JCE/BK 双线路刷新失败: {ch .last_error }',min_interval =15.0 )
+                    return False 
         if ok :
             ch .last_ok =time .time ()
+            ch .fail_streak =0 
         return ok 
     except Exception as e :
+        ch .fail_streak =getattr (ch ,'fail_streak',0 )+1 
         ch .last_error =('%s: %s'%(type (e ).__name__ ,e ))[:120 ]
         log (f'[{ch .slug }] {defn_label (ch .defn )} 刷新异常: {ch .last_error }',min_interval =15.0 )
         return False 
@@ -2881,6 +2941,14 @@ def refresh_loop (ch ):
         build_playlist (ch ,holdback =True )
         time .sleep (REFRESH_INTERVAL )
     while time .time ()-ch .last_access <IDLE_TIMEOUT :
+        # 停在备用线路的频道，每满 5 分钟回试一次 JCE：恢复了就切回主线路（保证 7 天回看可用）
+        if (ch .mode =='bk' and ch .slug not in FORCE_BK
+                and ch .bk_mode_since and time .time ()-ch .bk_mode_since >JCE_RETRY_SEC ):
+            try :
+                if jce_refresh (ch ):
+                    enter_jce_mode (ch ,'JCE 探测成功')
+            except Exception :
+                ch .bk_mode_since =time .time ()
         ok =refresh_once (ch )
         if ok :
             build_playlist (ch ,holdback =True )
@@ -2911,25 +2979,19 @@ def ensure_channel (ch ):
             else :
                 return 
     if wait_only :
-        coalesce_refresh (ch .slug ,lambda :refresh_once (ch ),timeout =5.0 )
+        coalesce_refresh (ch .slug ,lambda :refresh_once (ch ),timeout =8.0 )
         return 
     try :
         if need_fetch :
-            coalesce_refresh (ch .slug ,lambda :refresh_once (ch ),timeout =5.0 )
+            coalesce_refresh (ch .slug ,lambda :refresh_once (ch ),timeout =8.0 )
         if thread_dead :
             ch .thread =threading .Thread (target =refresh_loop ,args =(ch ,),daemon =True )
             ch .thread .start ()
     finally :
         with ch .lock :
             ch ._starting =False 
-def build_playlist (ch ,holdback :bool =True ):
+def build_jce_playlist (ch ,holdback :bool =True ,record :bool =True ):
     with ch .lock :
-        if ch .mode =='bk':
-            res =ch .bk_playlist or None 
-            if res :
-                ch .last_built_playlist =res 
-                ch .last_built_time =time .time ()
-            return res 
         keys =list (ch .order )[-15 :]
         segs =[ch .segments [k ]for k in keys if k in ch .segments ]
     if not segs :
@@ -2946,10 +3008,42 @@ def build_playlist (ch ,holdback :bool =True ):
         out .append ('#EXTINF:%.3f,'%dur )
         out .append (url )
     res ='\n'.join (out )+'\n'
-    with ch .lock :
-        ch .last_built_playlist =res 
-        ch .last_built_time =time .time ()
+    if record :
+        with ch .lock :
+            ch .last_built_playlist =res 
+            ch .last_built_time =time .time ()
     return res 
+def fetch_backup_playlist (ch ,wait =8.0 ):
+    """强制取备用线路（bkliveinfo）播放列表，供 ?line=bk 或整份备用订阅使用。"""
+    for attempt in range (2 ):
+        try :
+            if bk_refresh (ch ):
+                break 
+        except Exception as e :
+            ch .last_error =('%s: %s'%(type (e ).__name__ ,e ))[:120 ]
+            log (f'[{ch .slug }] 备用线路拉取失败: {ch .last_error }',min_interval =10.0 )
+            time .sleep (0.4 )
+    with ch .lock :
+        return ch .bk_playlist or ''
+def fetch_main_playlist (ch ,wait =8.0 ):
+    """强制取主线路（JCE）播放列表，供 ?line=jce 使用；失败返回空串，不会自动切备用。"""
+    if not ch .order :
+        try :
+            jce_refresh (ch )
+        except Exception as e :
+            ch .last_error =('%s: %s'%(type (e ).__name__ ,e ))[:120 ]
+            log (f'[{ch .slug }] 主线路拉取失败: {ch .last_error }',min_interval =10.0 )
+            return ''
+    return build_jce_playlist (ch ,holdback =True ,record =False )or ''
+def build_playlist (ch ,holdback :bool =True ):
+    with ch .lock :
+        if ch .mode =='bk':
+            res =ch .bk_playlist or None 
+            if res :
+                ch .last_built_playlist =res 
+                ch .last_built_time =time .time ()
+            return res 
+    return build_jce_playlist (ch ,holdback =holdback ,record =True )
 def trigger_background_refresh (ch ):
     with _inflight_lock :
         if ch .slug in _inflight_refresh :
@@ -2968,6 +3062,58 @@ server_start_time =time .time ()
 resolver :Resolver |None =None 
 _resolver_ready :bool =False 
 _resolver_lock =threading .Lock ()
+last_soft_reset_at =time .time ()
+
+def soft_reset (reason ='定时软复位',rotate_device =False ):
+    """不重启进程的软复位：清空线路缓存与失败冷却，让长时间运行后“失效令牌/空表”的频道重新回到主线路。"""
+    global last_soft_reset_at 
+    cleared =0 
+    for _slug ,_ch in CHANNEL_MAP .items ():
+        _drop_jce_buffer (_ch )
+        with _ch .lock :
+            _ch .bk_playlist =''
+            _ch .last_built_playlist =''
+            _ch .last_built_time =0.0 
+            _ch .last_error =''
+        _ch .bk_urls =[]
+        _ch .bk_urls_time =0.0 
+        _ch .last_ok =0.0 
+        _ch .fail_streak =0 
+        if _slug not in FORCE_BK :
+            _ch .mode ='jce'
+        cleared +=1 
+    if resolver is not None :
+        with resolver .state_lock :
+            resolver .state .cache .clear ()
+            resolver .state .playlist_cache .clear ()
+            resolver .state .channel_failures .clear ()
+        if rotate_device :
+            try :
+                resolver .rotate_device_on_400 (reason )
+            except Exception as e :
+                log (f'[系统] 软复位换身份跳过: {type (e ).__name__ }: {e }',min_interval =10.0 )
+    last_soft_reset_at =time .time ()
+    log (f'[系统] {reason} 完成：{cleared } 路频道缓存与失败冷却已清空，主线路重新可用')
+
+def start_auto_reset (sec :float ):
+    if sec <=0 :
+        log ('[系统] 定时软复位: 已关闭')
+        return False 
+    def _loop ():
+        nxt =time .time ()+sec 
+        while True :
+            time .sleep (min (30.0 ,max (1.0 ,nxt -time .time ())))
+            if time .time ()>=nxt :
+                nxt +=sec 
+                try :
+                    label =('定时软复位 %d 分钟'%(int (sec //60 ))) if sec >=60 else ('定时软复位 %d 秒'%int (sec ))
+                    soft_reset (label )
+                except Exception as e :
+                    log (f'[系统] 定时软复位失败: {type (e ).__name__ }: {e }',min_interval =30.0 )
+    threading .Thread (target =_loop ,daemon =True ,name ='auto-soft-reset').start ()
+    unit =('每 %d 分钟一次'%(int (sec //60 ))) if sec >=60 else ('每 %d 秒一次'%int (sec ))
+    log ('[系统] 定时软复位: %s (不重启进程)'%unit)
+    return True 
 
 # ==========================================
 # 新增：按客户端 IP 的频道高码率独占锁
@@ -3117,10 +3263,8 @@ class Handler (BaseHTTPRequestHandler ):
             host =self .headers .get ('Host',f'localhost:{server_port }')
             text =(
             f"====================================================\n"
-            f"ysp-live IPTV 直播网关运行中 (端口: {server_port })\n"
-            f"📢 官方发布社区: {AUTHOR_COMMUNITY}\n"
-            f"📢 官方发布频道: {AUTHOR_CHANNEL}\n"
-            f"⚠️ 严正声明: 其他任何渠道均非作者发布！\n"
+            f"ysplive IPTV 直播网关运行中 (端口: {server_port }, 版本: {__version__ })\n"
+            f"飞牛 fnOS 适配版 · 适配作者: 火舞狂沙\n"
             f"====================================================\n\n"
             f"全频道订阅: http://{host }/all.m3u\n"
             f"系统健康度: http://{host }/health\n"
@@ -3138,24 +3282,35 @@ class Handler (BaseHTTPRequestHandler ):
             engine_ready =resolver_ready ()
             cache_info =global_ts_cache .stats ()
             active_slots =len ([s for s in (resolver .state .sessions .values ()if resolver else [])if s and resolver .app_session_fresh (s )])
+            # 新增：全频道线路状态汇总（排查“某个频道播不出来”时直接看这里）
+            line_mode ={'jce':0 ,'bk':0 }
+            failing =[]
+            detail =[]
+            for _slug ,_ch in CHANNEL_MAP .items ():
+                line_mode [_ch .mode ]=line_mode .get (_ch .mode ,0 )+1 
+                age =int (now -_ch .last_ok )if _ch .last_ok else None 
+                # 只统计“被点播过但已失联”的频道；从未点过的空闲频道不算故障
+                if _ch .last_access and (age is None or age >CHANNEL_STALE_SEC ):
+                    failing .append (_slug )
+                detail .append ({'channel':_slug ,'mode':_ch .mode ,'ok_age_sec':age ,'error':_ch .last_error })
             health_data ={
             "ok":True ,
-            "version":"1.0.0",
-            "author_community":AUTHOR_COMMUNITY ,
-            "author_channel":AUTHOR_CHANNEL ,
-            "notice":"其他渠道均非作者发布！",
+            "version":ENGINE_VERSION ,
             "uptime_sec":int (now -server_start_time ),
             "engine":{
             "ready":engine_ready ,
             "active_device_slots":active_slots ,
             "session_valid":bool (sess and resolver and resolver .app_session_fresh (sess )),
-            "heartbeat_count":sess .heartbeat_count if sess else 0 ,
-            "guid":sess .cloud_guid if sess else ""
+            "heartbeat_count":sess .heartbeat_count if sess else 0 
             },
             "channels":len (global_channel_dir .unique_channels ()),
+            "line_mode":line_mode ,
+            "failing_channels":failing [:16 ],
             "ts_cache":cache_info ,
             "routes":["/","/all.m3u","/diag","/health","/<channel>.m3u8","/proxy.ts"]
             }
+            if 'full' in (parts .query or ''):
+                health_data ['channel_detail']=detail 
             self ._send (200 ,json .dumps (health_data ,ensure_ascii =False ,indent =2 ),'application/json; charset=utf-8',head_only =head_only )
             return 
         if path =='/all.m3u':
@@ -3192,11 +3347,8 @@ class Handler (BaseHTTPRequestHandler ):
             info =[]
             now =time .time ()
             info .append ("====================================================")
-            info .append (f"ysplive v1.0.0 诊断报告 (运行时间: {int (now -server_start_time )}s)")
-            info .append ("📢 首发地址")
-            info .append (f"社区：Gary's Club ({AUTHOR_COMMUNITY})")
-            info .append (f"频道：Gary's Club Channel ({AUTHOR_CHANNEL})")
-            info .append ("⚠️ 其他任何分发渠道均非作者本人！")
+            info .append (f"ysplive v{__version__ } 诊断报告 (运行时间: {int (now -server_start_time )}s)")
+            info .append ("飞牛 fnOS 适配版 · 适配作者: 火舞狂沙")
             info .append ("====================================================")
             engine_status ='就绪'if resolver_ready ()else '未就绪(1080p自动回退)'
             s0 =resolver .state .sessions .get (0 )if resolver else None 
@@ -3368,6 +3520,28 @@ class Handler (BaseHTTPRequestHandler ):
                 self ._send (404 ,'未知频道\n',head_only =head_only )
                 return 
             proto =self .headers .get ('X-Forwarded-Proto','http').split (',')[0 ].strip ().lower ()or 'http'
+            # ?line=jce 强制主线路 / ?line=bk 强制备用线路 / 不带 line 则主备自动
+            line_pref =(urllib .parse .parse_qs (parts .query ).get ('line',[''])[0 ]or '').strip ().lower ()
+            if line_pref in ('bk','backup','备用'):
+                ch .last_access =time .time ()
+                pl =fetch_backup_playlist (ch )
+                if pl and '#EXTM3U'in pl :
+                    with ch .lock :
+                        ch .last_m3u8_source ='bk'
+                    self ._send (200 ,pl ,'application/vnd.apple.mpegurl',head_only =head_only ,extra_headers ={'X-Line':'bk'})
+                    return 
+                self ._send (503 ,'频道 %s 备用线路暂无数据 (%s), 请稍后重试\n'%(ch .name ,ch .last_error or '拉取中'),head_only =head_only )
+                return 
+            if line_pref in ('jce','main','主'):
+                ch .last_access =time .time ()
+                pl =fetch_main_playlist (ch )
+                if pl :
+                    with ch .lock :
+                        ch .last_m3u8_source ='jce'
+                    self ._send (200 ,pl ,'application/vnd.apple.mpegurl',head_only =head_only ,extra_headers ={'X-Line':'jce'})
+                    return 
+                self ._send (503 ,'频道 %s 主线路暂无数据 (%s), 请稍后重试\n'%(ch .name ,ch .last_error or '拉取中'),head_only =head_only )
+                return 
             if catchup_times and (canonical in TIMESHIFT_SUPPORTED ):
                 start_ts ,end_ts =catchup_times 
                 try :
@@ -3543,7 +3717,7 @@ def main ():
     global resolver ,server_port ,engine_port ,global_channel_dir ,global_ts_cache 
     if os.name == 'nt':
         os.system('') 
-    ap =argparse .ArgumentParser (description ='央视频全频道直播代理（ysplive v1.0.0）')
+    ap =argparse .ArgumentParser (description =f'央视频全频道直播代理（ysplive v{__version__ }）')
     ap .add_argument ('port',nargs ='?',type =int ,default =8767 ,help ='监听端口 (默认 8767)')
     ap .add_argument ('--bind',default ='0.0.0.0',help ='监听地址 (默认 0.0.0.0)')
     ap .add_argument ('--data-dir',default =os .environ .get ('YSP_DATA_DIR',''),help ='数据持久化目录 (默认由 YSP_DATA_DIR 环境变量或脚本所在目录决定)')
@@ -3554,6 +3728,7 @@ def main ():
     ap .add_argument ('--zap-debounce',type =float ,default =float (os .environ .get ('YSP_ZAP_DEBOUNCE','10.0')),help ='换台防抖秒数: 切台后先出 1080p, 停留超过该秒数才后台请求高码率 (默认 10.0, 设为 0 关闭)')
     ap .add_argument ('--engine-port',type =int ,default =8787 ,help ='Web WASM 引擎端口 (默认 8787)')
     ap .add_argument ('--timeout',type =float ,default =10.0 ,help ='设备协议 HTTP 超时秒数 (默认 10, 注册失败时更快回退 1080p)')
+    ap .add_argument ('--auto-restart-sec',type =float ,default =float (os .environ .get ('YSP_AUTO_RESTART_SEC','21600')),help ='定时软复位间隔秒数 (默认 21600=6 小时, 0 关闭；不重启进程，只清缓存与失败冷却)')
     ap .add_argument ('--no-engine',action ='store_true',help ='不启动 Web WASM 伴生引擎')
     args =ap .parse_args ()
     server_port =args .port 
@@ -3615,16 +3790,16 @@ def main ():
     RESET = '\033[0m'
 
     log ('====================================================================')
-    log (f'ysplive v1.0.0 启动成功: {channels_count } 个独立频道 (央视 {c_yangshi } 路, 卫视 {c_weishi } 路)')
+    log (f'ysplive v{__version__ } 启动成功: {channels_count } 个独立频道 (央视 {c_yangshi } 路, 卫视 {c_weishi } 路)')
     log (f'全频道订阅:   http://localhost:{args .port }/all.m3u')
     log (f'系统健康度:   http://localhost:{args .port }/health')
     log (f'实时诊断日志: http://localhost:{args .port }/diag')
     log (f'{RED_BOLD}--------------------------------------------------------------------{RESET}')
-    log (f'{RED_BOLD}📢 公告{RESET}')
-    log (f'{RED_BOLD}社区：大亨分享 ({AUTHOR_COMMUNITY}){RESET}')
-    log (f'{RED_BOLD}频道：TMXKの分享 ({AUTHOR_CHANNEL}){RESET}')
-    log (f'{RED_BOLD}⚠️ 其他任何分发渠道均非作者本人！{RESET}')
+    log (f'{RED_BOLD}📢 飞牛 fnOS 适配版{RESET}')
+    log (f'{RED_BOLD}适配作者：火舞狂沙{RESET}')
+    log (f'{RED_BOLD}上游程序与许可信息见应用目录 LICENSE.txt{RESET}')
     log (f'{RED_BOLD}===================================================================={RESET}')
+    start_auto_reset (float (args .auto_restart_sec ))
     try :
         srv .serve_forever ()
     except KeyboardInterrupt :

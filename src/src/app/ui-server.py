@@ -56,6 +56,264 @@ EXT_UA = (
 )
 
 
+# ---------------------------------------------------------------- 版本检查 / 升级
+
+APP_REPO = "zyp1690/ysplive"
+UPDATE_DIR = "updates"
+UPDATE_CACHE_TTL = 600.0
+UPDATE_META_URL = os.environ.get("YSP_UPDATE_META_URL", "").strip()
+UPDATE_RAW_BASES = (
+    "https://raw.githubusercontent.com/%s/main" % APP_REPO,
+    "https://cdn.jsdelivr.net/gh/%s@main" % APP_REPO,
+    "https://gh-proxy.com/https://raw.githubusercontent.com/%s/main" % APP_REPO,
+)
+UPDATE_CHECK_INTERVAL = float(os.environ.get("YSP_UPDATE_INTERVAL", "21600") or 21600)
+_update_lock = threading.Lock()
+_update_cache = {"at": 0.0, "data": None, "busy": False}
+
+
+def current_version() -> str:
+    """读引擎文件里的 __version__，保证和实际跑的代码一致。"""
+    try:
+        with open(os.path.join(BASE_DIR, "ysp-live.py"), "r", encoding="utf-8", errors="replace") as f:
+            head = f.read(4096)
+        m = re.search(r"__version__\s*=\s*'([^']+)'", head)
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
+    return "0.0.0"
+
+
+def _ver_key(v: str):
+    nums = re.findall(r"\d+", v or "")
+    out = [int(x) for x in nums[:4]]
+    while len(out) < 4:
+        out.append(0)
+    return tuple(out)
+
+
+def _gh_json(url: str, timeout: float = 10.0):
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "ysplive-updater",
+        "Accept": "application/vnd.github+json",
+    })
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8", "replace"))
+
+
+def _gh_text(url: str, timeout: float = 10.0) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": "ysplive-updater"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read().decode("utf-8", "replace")
+
+
+def check_update(force: bool = False) -> dict:
+    """比对 GitHub 仓库最新版本。
+
+    先读仓库里的 ysplive/fpk/latest.json（单个文件，不受 GitHub API 每分钟限流影响，
+    download_url 里可以直接写国内 CDN 地址）；读不到再退回 GitHub API 列目录。
+    """
+    now = time.time()
+    with _update_lock:
+        cached = _update_cache["data"]
+        if (not force) and cached and now - _update_cache["at"] < UPDATE_CACHE_TTL:
+            return cached
+        if _update_cache["busy"]:
+            return cached or {"current": current_version(), "latest": "", "has_update": False,
+                              "error": "正在检查，请稍候"}
+        _update_cache["busy"] = True
+
+    info = {
+        "current": current_version(),
+        "latest": "",
+        "has_update": False,
+        "notes": "",
+        "fpk_url": "",
+        "fpk_name": "",
+        "sha256": "",
+        "size": 0,
+        "checked_at": int(now),
+        "repo": APP_REPO,
+        "source": "",
+        "error": "",
+    }
+    try:
+        raw_ok = False
+        if UPDATE_META_URL:
+            meta = _gh_json(UPDATE_META_URL, timeout=10.0)
+            if isinstance(meta, dict) and meta.get("version"):
+                info["latest"] = str(meta.get("version"))
+                info["fpk_name"] = str(meta.get("fpk") or "")
+                info["fpk_url"] = str(meta.get("url") or "")
+                info["sha256"] = str(meta.get("sha256") or "").lower()
+                info["size"] = int(meta.get("size") or 0)
+                info["notes"] = str(meta.get("notes") or "")
+                info["source"] = "meta_url"
+                raw_ok = True
+        for base in (UPDATE_RAW_BASES if not raw_ok else ()):
+            try:
+                meta = _gh_json(base + "/ysplive/fpk/latest.json", timeout=8.0)
+                if isinstance(meta, dict) and meta.get("version"):
+                    info["latest"] = str(meta.get("version"))
+                    info["fpk_name"] = str(meta.get("fpk") or "")
+                    info["fpk_url"] = str(meta.get("url") or "")
+                    info["sha256"] = str(meta.get("sha256") or "").lower()
+                    info["size"] = int(meta.get("size") or 0)
+                    info["notes"] = str(meta.get("notes") or "")
+                    info["source"] = "latest.json"
+                    raw_ok = True
+                    break
+            except Exception:
+                continue
+        if not raw_ok:
+            listing = _gh_json("https://api.github.com/repos/%s/contents/ysplive/fpk?ref=main" % APP_REPO)
+            if not isinstance(listing, list):
+                raise ValueError("仓库返回格式异常")
+            best = None
+            sha_files = set()
+            for item in listing:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("name") or ""
+                if name.endswith(".fpk.sha256"):
+                    sha_files.add(name)
+                m = re.search(r"(\d+\.\d+\.\d+)", name)
+                if name.endswith(".fpk") and m:
+                    if best is None or _ver_key(m.group(1)) > _ver_key(best[0]):
+                        best = (m.group(1), item)
+            if not best:
+                raise ValueError("仓库里还没有安装包")
+            ver, item = best
+            info["latest"] = ver
+            info["fpk_name"] = item.get("name", "")
+            info["fpk_url"] = item.get("download_url") or ""
+            info["size"] = int(item.get("size") or 0)
+            info["source"] = "contents"
+            sha_name = info["fpk_name"] + ".sha256"
+            if sha_name in sha_files:
+                try:
+                    raw = _gh_text(UPDATE_RAW_BASES[0] + "/ysplive/fpk/%s" % sha_name)
+                    parts = raw.split()
+                    if parts:
+                        info["sha256"] = parts[0].strip().lower()
+                except Exception:
+                    pass
+
+        info["has_update"] = _ver_key(info["latest"]) > _ver_key(info["current"])
+    except Exception as exc:  # noqa: BLE001
+        msg = "%s: %s" % (type(exc).__name__, exc)
+        low = msg.lower()
+        if "rate limit" in low or "403" in low:
+            msg = "GitHub 接口限流（同一出口 IP 每小时次数用尽），请稍后再试；也可在配置里设 YSP_UPDATE_META_URL 指向自己维护的 latest.json"
+        elif "timed out" in low or "urlopen error" in low:
+            msg = "连不上 GitHub（可能被网络阻断或 IPv6 不通），可设 YSP_UPDATE_META_URL 走自有 CDN"
+        info["error"] = msg
+    finally:
+        with _update_lock:
+            _update_cache["busy"] = False
+            if not info["error"]:
+                _update_cache["data"] = info
+                _update_cache["at"] = time.time()
+    return info
+
+
+def cached_update_info() -> dict:
+    """给 /api/state 用：只读缓存，过期就后台补一次，绝不阻塞页面。"""
+    with _update_lock:
+        data = _update_cache["data"]
+        stale = (not data) or (time.time() - _update_cache["at"] > UPDATE_CHECK_INTERVAL)
+    if stale:
+        threading.Thread(target=check_update, daemon=True).start()
+    return data or {"current": current_version(), "latest": "", "has_update": False,
+                    "error": "", "checking": True}
+
+
+def download_update() -> dict:
+    """下载新包到 data/updates/ 并校验 sha256。返回路径，供应用中心手动安装。"""
+    info = check_update(force=True)
+    if info.get("error"):
+        raise RuntimeError("检测失败：%s" % info["error"])
+    url = info.get("fpk_url") or ""
+    name = info.get("fpk_name") or ""
+    if not url or not name:
+        raise RuntimeError("没有可下载的安装包地址")
+    if not re.match(r"^[\w.\-]+\.fpk$", name):
+        raise RuntimeError("安装包文件名不合法：%s" % name)
+    dest_dir = os.path.join(DATA_DIR, UPDATE_DIR)
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, name)
+
+    candidates = [url]
+    for base in UPDATE_RAW_BASES:
+        candidates.append(base + "/ysplive/fpk/" + name)
+    tmp = dest + ".part"
+    last_err = None
+    for cand in candidates:
+        try:
+            req = urllib.request.Request(cand, headers={"User-Agent": "ysplive-updater"})
+            with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as f:
+                got = 0
+                while True:
+                    chunk = resp.read(262144)
+                    if not chunk:
+                        break
+                    got += len(chunk)
+                    if got > 64 * 1024 * 1024:
+                        raise RuntimeError("安装包超过 64MB，已中止")
+                    f.write(chunk)
+            if os.path.getsize(tmp) < 100000:
+                raise RuntimeError("下载的文件过小，可能不是安装包")
+            os.replace(tmp, dest)
+            last_err = None
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
+    if last_err is not None:
+        raise RuntimeError("安装包下载失败：%s" % last_err)
+
+    import hashlib
+    sha = ""
+    with open(dest, "rb") as f:
+        h = hashlib.sha256()
+        while True:
+            b = f.read(1048576)
+            if not b:
+                break
+            h.update(b)
+        sha = h.hexdigest()
+    expect = (info.get("sha256") or "").lower()
+    return {
+        "path": dest,
+        "size": os.path.getsize(dest),
+        "sha256": sha,
+        "expect": expect,
+        "sha_ok": (sha == expect) if expect else None,
+        "version": info.get("latest", ""),
+    }
+
+
+def start_update_watch():
+    if UPDATE_CHECK_INTERVAL <= 0:
+        return
+    def _loop():
+        time.sleep(8)
+        while True:
+            try:
+                info = check_update(force=True)
+                if info.get("has_update"):
+                    print("[更新] 发现新版本 %s（当前 %s）" % (info.get("latest"), info.get("current")), flush=True)
+            except Exception:
+                pass
+            time.sleep(UPDATE_CHECK_INTERVAL)
+    threading.Thread(target=_loop, daemon=True).start()
+
+
 
 # ---------------------------------------------------------------- EPG（节目单）
 
@@ -440,7 +698,15 @@ def load_channels(host_header: str):
     return builtin, cfg
 
 
-def build_merged_playlist(host_header: str, builtin, cfg) -> str:
+def _marked_url(url: str, line: str) -> str:
+    """给内置频道地址加上线路标记；外部自定义地址原样返回。"""
+    if not url:
+        return url
+    sep = "&" if "?" in url else "?"
+    return url + sep + "line=" + line
+
+
+def build_merged_playlist(host_header: str, builtin, cfg, line: str = "", dual: bool = False) -> str:
     proto = "http"
     head = None
     status, _ctype, body = engine_get("/all.m3u", host_header, 12.0)
@@ -470,14 +736,26 @@ def build_merged_playlist(host_header: str, builtin, cfg) -> str:
         ch_name = ov.get("name") or name or attrs.get("tvg-name") or slug
         ch_group = ov.get("group") or attrs.get("group-title") or "其他"
         play_url = ov.get("url") or url
+        internal = not ov.get("url") and bool(slug)
 
-        line = '#EXTINF:-1 tvg-id="%s" tvg-name="%s" tvg-logo="%s" group-title="%s"' % (
-            attrs.get("tvg-id", ""), ch_name, attrs.get("tvg-logo", ""), ch_group)
-        if attrs.get("catchup"):
-            line += ' catchup="append" catchup-days="%s" catchup-source="%s"' % (
-                attrs.get("catchup-days", "7"), attrs.get("catchup-source", ""))
-        out.append(line + "," + ch_name)
-        out.append(play_url)
+        def emit(channel_name, channel_url, with_catchup):
+            ln = '#EXTINF:-1 tvg-id="%s" tvg-name="%s" tvg-logo="%s" group-title="%s"' % (
+                attrs.get("tvg-id", ""), channel_name, attrs.get("tvg-logo", ""), ch_group)
+            if with_catchup and attrs.get("catchup"):
+                ln += ' catchup="append" catchup-days="%s" catchup-source="%s"' % (
+                    attrs.get("catchup-days", "7"), attrs.get("catchup-source", ""))
+            out.append(ln + "," + channel_name)
+            out.append(channel_url)
+
+        if internal and line == "bk":
+            # 整份订阅强制走备用线路：7 天回看依赖主线路，这里不带 catchup
+            emit(ch_name, _marked_url(play_url, "bk"), False)
+        elif internal and dual:
+            # 主 + 备两条：播放器卡在第一条时手动切第二条，不用改订阅
+            emit(ch_name, play_url, True)
+            emit(ch_name + "·备", _marked_url(play_url, "bk"), False)
+        else:
+            emit(ch_name, play_url, True)
 
     for ch in cfg["custom"]:
         out.append('#EXTINF:-1 tvg-name="%s" tvg-logo="%s" group-title="%s",%s' % (
@@ -607,6 +885,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(load_config(), head_only=head_only)
                 return
 
+            if path == "/api/update":
+                force = (query.get("force") or [""])[0] in ("1", "true", "yes")
+                self._send_json(check_update(force=force), head_only=head_only)
+                return
+
             if path == "/api/diag":
                 host = self.headers.get("Host", "")
                 status, ctype, body = engine_get("/diag", host, 15.0)
@@ -616,7 +899,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/all.m3u":
                 host = self.headers.get("Host", "")
                 builtin, cfg = load_channels(host)
-                text = build_merged_playlist(host, builtin, cfg)
+                want_line = (query.get("line", [""])[0] or "").strip().lower()
+                if want_line not in ("bk", "backup", "jce", "main"):
+                    want_line = ""
+                want_dual = (query.get("dual", query.get("bak", [""]))[0] or "").strip().lower()
+                want_dual = want_dual in ("1", "true", "yes", "on")
+                text = build_merged_playlist(host, builtin, cfg, line=want_line, dual=want_dual)
                 self._send(200, text.encode("utf-8"), "application/vnd.apple.mpegurl",
                            extra={"Access-Control-Allow-Origin": "*"}, head_only=head_only)
                 return
@@ -687,6 +975,8 @@ class Handler(BaseHTTPRequestHandler):
             "writable": is_private_addr(self._client_ip()),
             "scope": client_scope(self._client_ip()),
             "epg": epg_meta,
+            "version": current_version(),
+            "update": cached_update_info(),
         }
         self._send_json(payload, head_only=head_only)
 
@@ -700,6 +990,14 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.unquote(parsed.path)
         if path == "/api/config":
             self.handle_config_write()
+        elif path in ("/api/update/download", "/api/update/upgrade"):
+            if not is_private_addr(self._client_ip()):
+                self._send_json({"error": "仅内网 / IPv6 访问可下载升级包"}, 403)
+                return
+            try:
+                self._send_json(download_update())
+            except Exception as exc:  # noqa: BLE001
+                self._send_json({"error": str(exc)}, 500)
         else:
             self._send_json({"error": "unsupported"}, 404)
 
@@ -749,7 +1047,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         pass_keys = ("content-type", "content-range", "accept-ranges",
-                     "content-length", "location", "cache-control")
+                     "content-length", "location", "cache-control", "x-line")
         self.send_response(resp.status)
         for key, value in resp.getheaders():
             if key.lower() in pass_keys:
@@ -925,6 +1223,8 @@ def main():
 
     print("[ui] ysplive 管理界面已启动: 端口 %d（%s）  引擎 127.0.0.1:%d" %
           (UI_PORT, "IPv4+IPv6 双栈" if dual else "仅 IPv4", ENGINE_PORT), flush=True)
+    start_update_watch()
+
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
