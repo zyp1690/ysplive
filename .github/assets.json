@@ -1,5 +1,5 @@
 {
-  "note": "本文件声明仓库里需要落地的二进制资产，由 .github/workflows/fetch-assets.yml 在 main 分支拉取、校验 sha256 后提交回仓库。落地完成后仓库自身即可自证完整性。（当前版本 1.1.16）",
+  "note": "本文件声明仓库里需要落地的二进制资产，由 .github/workflows/fetch-assets.yml 在 main 分支拉取、校验 sha256 后提交回仓库。落地完成后仓库自身即可自证完整性。（当前版本 1.1.16，retrigger 2）",
   "assets": [
     {
       "path": "ysplive/fpk/ysplive-1.1.16-fnos-all.fpk",
