@@ -49,6 +49,18 @@
               "size": 401533
             }
           }
+        },
+        "1.1.16": {
+          "changelog": "新增「检查 GitHub 新版本 + 一键下载升级包」：管理面板顶部多了「版本与升级」卡片，点「检查更新」读仓库 ysplive/fpk/latest.json 比对版本（读不到时退回 GitHub API 列目录，也支持 YSP_UPDATE_META_URL 指向自有索引）；有新版的「下载升级包」按钮亮起，包下到 var/data/updates/ 并核对 sha256，再到应用中心「手动安装」即完成升级，配置与频道全部保留。后台每 6 小时自动查一次并写日志提醒（YSP_UPDATE_INTERVAL 可调，0 关闭）。",
+          "updated_at": "2026-11-27T12:10:00+08:00",
+          "os_min_version": "0.9.0",
+          "packages": {
+            "all": {
+              "download_url": "./ysplive/fpk/ysplive-1.1.16-fnos-all.fpk",
+              "sha256": "2f8f6603e8ff0984b9e1935b341c875839ae89cd76e775a86d4f136a83d6a6a0",
+              "size": 442654
+            }
+          }
         }
       }
     }
