@@ -1,0 +1,8 @@
+{
+  "version": "1.1.16",
+  "fpk": "ysplive-1.1.16-fnos-all.fpk",
+  "url": "https://raw.githubusercontent.com/zyp1690/ysplive/main/ysplive/fpk/ysplive-1.1.16-fnos-all.fpk",
+  "size": 442654,
+  "sha256": "2f8f6603e8ff0984b9e1935b341c875839ae89cd76e775a86d4f136a83d6a6a0",
+  "notes": "新增「检查 GitHub 新版本 + 一键下载升级包」：管理面板顶部「版本与升级」卡片会读这份 latest.json 比对版本，有新版就把 FPK 下到 NAS 数据目录并核对 sha256，再到应用中心「手动安装」，配置与频道全部保留；后台每 6 小时自动查一次并写日志提醒。"
+}
